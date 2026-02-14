@@ -10,6 +10,7 @@
     --darker: #0a0a0a;
     --gray: #2f2f2f;
     --light-gray: #8c8c8c;
+    --light-gray-luffy: #bebdbd;
     --gold: #ffd700;
 }
 
@@ -41,15 +42,18 @@ body {
     visibility: hidden;
 }
 
-.loading-logo {
+.loading-logo, #loading-logo {
     font-family: 'Bebas Neue', cursive;
     font-size: 4rem;
     color: var(--primary);
     letter-spacing: 0.2em;
     text-shadow: 0 0 30px rgba(229, 9, 20, 0.5);
-    animation: pulse 2s ease-in-out infinite;
+    opacity: 0;
+    animation: appearAndPulse 5s ease-in-out forwards;
 }
-
+#loading-logo {
+    font-size: 2rem;
+}
 .loading-bar {
     width: 300px;
     height: 4px;
@@ -70,12 +74,30 @@ body {
     animation: loading 3s ease-in-out forwards;
     box-shadow: 0 0 20px var(--primary);
 }
-
-@keyframes pulse {
-    0%, 100% { opacity: 1; transform: scale(1); }
-    50% { opacity: 0.7; transform: scale(1.05); }
+@keyframes appearAndPulse {
+    /* 0% a 40%: El logo aparece suavemente (Fade In) */
+    0% {
+        opacity: 0;
+        transform: scale(0.9);
+    }
+    40% {
+        opacity: 1;
+        transform: scale(1);
+    }
+    /* 40% a 100%: El logo ya es visible y empieza a pulsar */
+    60% {
+        transform: scale(1.05);
+        opacity: 0.8;
+    }
+    80% {
+        transform: scale(1);
+        opacity: 1;
+    }
+    100% {
+        transform: scale(1.03);
+        opacity: 0.9;
+    }
 }
-
 @keyframes loading {
     0% { width: 0%; }
     100% { width: 100%; }
@@ -112,7 +134,6 @@ header {
     justify-content: center;
     font-family: 'Bebas Neue', cursive;
     font-size: 2rem;
-    /*box-shadow: 0 4px 20px rgba(229, 9, 20, 0.507);*/
     filter: drop-shadow(0 0px 5px rgb(229, 9, 20));
 }
 
@@ -159,9 +180,146 @@ main {
     box-shadow: 0 0 10px var(--primary);
 }
 
+/* ═══════════════════════════════════════════════════════════════════════════
+   FILTROS DE CATEGORÍA
+   ═══════════════════════════════════════════════════════════════════════════ */
+.filter-section {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    margin-bottom: 30px;
+    padding: 20px;
+    background: rgba(255, 255, 255, 0.03);
+    border-radius: 12px;
+    border: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.filter-btn {
+    background: var(--gray);
+    border: 2px solid transparent;
+    color: #fff;
+    padding: 10px 20px;
+    border-radius: 25px;
+    cursor: pointer;
+    font-weight: 600;
+    font-size: 0.9rem;
+    transition: all 0.3s ease;
+    font-family: 'Montserrat', sans-serif;
+    text-transform: capitalize;
+    margin-top: 5px;
+    margin-bottom: 5px;
+}
+
+.filter-btn:hover {
+    background: rgba(229, 9, 20, 0.2);
+    border-color: var(--primary);
+    transform: translateY(-2px);
+}
+
+.filter-btn.active {
+    background: var(--primary);
+    border-color: var(--primary);
+    box-shadow: 0 4px 15px rgba(229, 9, 20, 0.4);
+}
+/*-------*/
+/* ═══════════════════════════════════════════════════════════════════════════
+   BOTÓN DE EXPANSIÓN DE FILTROS
+   ═══════════════════════════════════════════════════════════════════════════ */
+.expand-btn {
+    display: none; /* Oculto por default, se muestra en JS si > límite */
+    background: transparent;
+    border: none;
+    color: #fff;
+    font-size: 1.2rem;
+    cursor: pointer;
+    transition: transform 0.3s ease;
+    padding: 0 10px;
+    align-self: center; /* Para que se alinee verticalmente con los botones */
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   ESTILOS PARA COLAPSADO/EXPANDIDO
+   ═══════════════════════════════════════════════════════════════════════════ */
+#categoryFilters {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px; /* Mantiene el gap de tu .filter-section */
+}
+
+#categoryFilters.collapsed button:nth-of-type(n+13) {
+    display: none; /* Oculta botones a partir del 6° (ajusta n+6 si cambias limit a e.g. 4 -> n+5) */
+}
+
+#categoryFilters.expanded {
+    /* Opcional: puedes agregar estilos extras, como animación o borde */
+    animation: expandAnimation 0.3s ease-in-out;
+}
+#categoryFilters.collapsed {
+    /* Opcional: puedes agregar estilos extras, como animación o borde */
+    animation: collapsedAnimation 0.3s ease-in-out;
+}
+
+@keyframes expandAnimation {
+    from { max-height: 0; opacity: 0; }
+    to { max-height: 200px; opacity: 1; } /* Ajusta max-height según el alto esperado */
+}
+@keyframes collapsedAnimation {
+    from { max-height: 200px; opacity: 1; }
+    to { max-height: 0; opacity: 0; } /* Ajusta max-height según el alto esperado */
+}
+/* Ajuste para la sección de filtros cuando se expande (opcional, para que no se desborde) */
+.filter-section {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    align-items: center;
+    transition: max-height 0.3s ease; /* Suaviza la expansión */
+}
+#categoryFilters {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    flex-grow: 1;               /* Ocupa todo el espacio disponible */
+    order: 2;                   /* Orden: después de "Todas" */
+}
+#expandFiltersBtn {
+    order: 1;                   /* Siempre al inicio */
+    margin-left: auto;          /* Empuja al extremo derecho */
+    display: none;              /* controlado por JS */
+}
+.filter-section #categoryFilters.collapsed {
+    max-height: 0px; /* Alto aproximado de una fila de botones; ajusta si tus botones son más altos */
+    overflow: hidden;
+}
+
+.filter-section #categoryFilters.expanded {
+    max-height: none; /* Muestra todo */
+}
+.expand-icon {
+    width: 24px;                 /* ajusta según tu diseño */
+    height: 24px;
+    transition: transform 0.4s ease;
+    object-fit: contain;
+    filter: invert(100%);
+    margin-left: 10px;
+}
+
+/* Rotación al expandir */
+.expand-btn.rotated .expand-icon {
+    transform: rotate(180deg);
+}
+
+/* Opcional: hover sutil */
+.expand-btn:hover {
+    opacity: 0.85;
+    transform: scale(1.08);
+}
+/* ═══════════════════════════════════════════════════════════════════════════
+   GRID DE PELÍCULAS
+   ═══════════════════════════════════════════════════════════════════════════ */
 .movies-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(250px, 2fr));
+    grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
     gap: 30px;
     animation: fadeIn 0.8s ease-in;
 }
@@ -204,9 +362,74 @@ main {
     box-shadow: 0 20px 40px rgba(0,0,0,0.7), 0 0 30px rgba(229, 9, 20, 0.3);
 }
 
+/* ═══════════════════════════════════════════════════════════════════════════
+   PELÍCULAS SUSPENDIDAS
+   ═══════════════════════════════════════════════════════════════════════════ */
+.movie-card.suspended {
+    opacity: 0.5;
+    filter: grayscale(100%);
+}
+
+.movie-card.suspended:hover {
+    transform: translateY(-5px) scale(1.01);
+    opacity: 0.6;
+}
+
+.suspension-badge {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    background: rgba(0, 0, 0, 0.9);
+    color: #fff;
+    padding: 8px 12px;
+    border-radius: 8px;
+    font-size: 0.75rem;
+    font-weight: 700;
+    z-index: 2;
+    text-align: center;
+    border: 2px solid rgba(255, 255, 255, 0.3);
+}
+
+.suspension-badge .countdown {
+    display: block;
+    font-size: 0.85rem;
+    color: var(--gold);
+    margin-top: 4px;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   LISTÓN DE "MÁS VOTADA"
+   ═══════════════════════════════════════════════════════════════════════════ */
+.ribbon-badge {
+    position: absolute;
+    top: 15px;
+    left: -10px;
+    background: linear-gradient(135deg, var(--gold) 0%, #ffa500 100%);
+    color: var(--darker);
+    padding: 8px 20px 8px 15px;
+    font-size: 0.75rem;
+    font-weight: 900;
+    z-index: 3;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    box-shadow: 0 4px 15px rgba(255, 215, 0, 0.5);
+    clip-path: polygon(0 0, 100% 0, 95% 50%, 100% 100%, 0 100%);
+    animation: ribbonGlow 2s ease-in-out infinite;
+}
+
+@keyframes ribbonGlow {
+    0%, 100% { 
+        box-shadow: 0 4px 15px rgba(255, 215, 0, 0.5);
+    }
+    50% { 
+        box-shadow: 0 4px 25px rgba(255, 215, 0, 0.8);
+    }
+}
+
 .movie-poster {
     width: 100%;
-    height: 375px;
+    height: 100%;
+    /*height: 375px;*/
     object-fit: cover;
     display: block;
 }
@@ -243,7 +466,7 @@ main {
     letter-spacing: 0.05em;
 }
 
-.vote-btn:hover {
+.vote-btn:hover:not(:disabled) {
     background: #ff0a16;
     transform: scale(1.05);
     box-shadow: 0 5px 20px rgba(229, 9, 20, 0.5);
@@ -258,7 +481,19 @@ main {
     background: #ffed4e;
 }
 
-/* MODAL */
+.vote-btn:disabled {
+    cursor: not-allowed;
+    opacity: 0.6;
+}
+
+.vote-btn.disabled {
+    background: var(--gray);
+    cursor: not-allowed;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   MODAL
+   ═══════════════════════════════════════════════════════════════════════════ */
 .modal {
     position: fixed;
     top: 0;
@@ -323,7 +558,6 @@ main {
 .modal-poster {
     width: 100%;
     height: auto;
-
     object-fit: cover;
     border-radius: 16px 16px 0 0;
 }
@@ -337,6 +571,26 @@ main {
     font-size: 2.5rem;
     margin-bottom: 20px;
     letter-spacing: 0.05em;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   CATEGORÍAS EN MODAL
+   ═══════════════════════════════════════════════════════════════════════════ */
+.modal-categories {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-bottom: 20px;
+}
+
+.category-tag {
+    background: rgba(229, 9, 20, 0.2);
+    color: var(--primary);
+    padding: 6px 12px;
+    border-radius: 15px;
+    font-size: 0.85rem;
+    font-weight: 600;
+    border: 1px solid rgba(229, 9, 20, 0.3);
 }
 
 .modal-summary {
@@ -387,6 +641,50 @@ main {
     color: var(--light-gray);
 }
 
+/* ═══════════════════════════════════════════════════════════════════════════
+   NOTIFICACIONES
+   ═══════════════════════════════════════════════════════════════════════════ */
+.notification {
+    position: fixed;
+    top: 100px;
+    right: 30px;
+    background: linear-gradient(135deg, var(--primary) 0%, #ff4444 100%);
+    color: #fff;
+    padding: 15px 25px;
+    border-radius: 8px;
+    font-weight: 600;
+    box-shadow: 0 8px 25px rgba(229, 9, 20, 0.4);
+    z-index: 10001;
+    opacity: 0;
+    transform: translateX(400px);
+    transition: all 0.3s ease;
+}
+
+.notification.show {
+    opacity: 1;
+    transform: translateX(0);
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   MENSAJES VACÍOS Y ERRORES
+   ═══════════════════════════════════════════════════════════════════════════ */
+.empty-message,
+.error {
+    text-align: center;
+    padding: 60px 20px;
+    font-size: 1.2rem;
+    color: var(--light-gray);
+    grid-column: 1 / -1;
+}
+
+.loading {
+    text-align: center;
+    padding: 60px 20px;
+    font-size: 1.2rem;
+    color: var(--light-gray);
+    grid-column: 1 / -1;
+}
+
 /* SCROLLBAR */
 ::-webkit-scrollbar {
     width: 10px;
@@ -405,21 +703,82 @@ main {
     background: #ff0a16;
 }
 
-
 .Luffy {
     position: fixed;
     z-index: 100;
     right: 20px;
     bottom: 20px;
 }
-.Luffy a{
+
+.Luffy a {
     font-size: .85rem;
-    color: var(--light-gray);
+    color: var(--light-gray-luffy);
     font-weight: 300;
-    letter-spacing: 0.15em;
+    letter-spacing: 0.18rem;
+    text-shadow: #000000 0px 0px 10px;
+    font-weight: bold;
 }
-@media only screen and (max-width: 600px) {
-    .Luffy a{
-    font-size: .55rem;
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   RESPONSIVE
+   ═══════════════════════════════════════════════════════════════════════════ */
+@media only screen and (max-width: 768px) {
+    header {
+        padding: 15px 30px;
+    }
+    
+    main {
+        margin-top: 100px;
+        padding: 20px 30px;
+    }
+    
+    .movies-grid {
+        grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+        gap: 20px;
+    }
+    
+    .filter-section {
+        padding: 15px;
+        gap: 8px;
+    }
+    
+    .filter-btn {
+        font-size: 0.85rem;
+        padding: 8px 16px;
+    }
+    
+    .notification {
+        right: 15px;
+        left: 15px;
+        top: 90px;
+    }
+    
+    .Luffy a {
+        font-size: .65rem;
+    }
+    .vote-btn{
+        font-size: 0.80rem;
+    }
 }
+
+
+@media only screen and (max-width: 482px) {
+    
+    .movies-grid {
+        grid-template-columns: repeat(auto-fill, minmax(125px, 1fr));
+        gap: 10px;
+    }
+    .vote-btn{
+        font-size: 0.65rem;
+    }
+    .movie-title{
+        font-size: .85rem;
+        font-weight: bold;
+    }
+    header{
+        padding: 10px 10px;
+    }
+    main{
+        padding: 10px 10px;
+    }
 }
