@@ -351,10 +351,11 @@ if ($method === 'GET') {
         $titulo = trim($data['titulo'] ?? '');
         $poster = trim($data['poster'] ?? '');
         $poster_large = trim($data['poster_large'] ?? '');
+        $trailer = trim($data['trailer'] ?? '');
         $resumen = trim($data['resumen'] ?? '');
         $categorias = $data['categorias'] ?? [];
         
-        if (empty($titulo) || empty($poster) || empty($poster_large) || empty($resumen)) {
+        if (empty($titulo) || empty($poster) || empty($poster_large) || empty($trailer) || empty($resumen)) {
             http_response_code(400);
             die(json_encode(['success' => false, 'message' => 'Todos los campos son obligatorios']));
         }
@@ -369,10 +370,10 @@ if ($method === 'GET') {
             
             // Insertar película
             $stmt = $db->prepare("
-                INSERT INTO peliculas (titulo, poster, poster_large, resumen, votos, veces_ganadora)
-                VALUES (?, ?, ?, ?, 0, 0)
+                INSERT INTO peliculas (titulo, poster, poster_large, trailer, resumen, votos, veces_ganadora)
+                VALUES (?, ?, ?, ?, ?, 0, 0)
             ");
-            $stmt->execute([$titulo, $poster, $poster_large, $resumen]);
+            $stmt->execute([$titulo, $poster, $poster_large, $trailer, $resumen]);
             
             $pelicula_id = $db->lastInsertId();
             
@@ -394,7 +395,7 @@ if ($method === 'GET') {
     }
     
     // ═══════════════════════════════════════════════════════════════════════════
-    // ACTUALIZAR PELÍCULA
+    // MODIFICAR PELÍCULA
     // ═══════════════════════════════════════════════════════════════════════════
     if ($action === 'update_movie') {
         $data = json_decode(file_get_contents('php://input'), true) ?: [];
@@ -403,13 +404,14 @@ if ($method === 'GET') {
         $titulo = trim($data['titulo'] ?? '');
         $poster = trim($data['poster'] ?? '');
         $poster_large = trim($data['poster_large'] ?? '');
+        $trailer = trim($data['trailer'] ?? '');
         $resumen = trim($data['resumen'] ?? '');
         $veces_ganadora = (int)($data['veces_ganadora'] ?? 0);
         $categorias = $data['categorias'] ?? [];
         
-        if ($id < 1 || empty($titulo) || empty($poster) || empty($poster_large) || empty($resumen)) {
+        if ($id < 1 || empty($titulo) || empty($poster) || empty($poster_large) || empty($trailer) || empty($resumen)) {
             http_response_code(400);
-            die(json_encode(['success' => false, 'message' => 'Todos los campos son obligatorios']));
+            die(json_encode(['success' => false, 'message' => "Falta el campo: $nombre_del_campo"]));
         }
         
         if (empty($categorias) || count($categorias) > 10) {
@@ -423,10 +425,10 @@ if ($method === 'GET') {
             // Actualizar película
             $stmt = $db->prepare("
                 UPDATE peliculas 
-                SET titulo = ?, poster = ?, poster_large = ?, resumen = ?, veces_ganadora = ?
+                SET titulo = ?, poster = ?, poster_large = ?, trailer = ?, resumen = ?, veces_ganadora = ?
                 WHERE id = ?
             ");
-            $stmt->execute([$titulo, $poster, $poster_large, $resumen, $veces_ganadora, $id]);
+            $stmt->execute([$titulo, $poster, $poster_large, $trailer, $resumen, $veces_ganadora, $id]);
             
             // Eliminar categorías anteriores
             $db->prepare("DELETE FROM pelicula_categorias WHERE pelicula_id = ?")->execute([$id]);

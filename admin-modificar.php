@@ -45,6 +45,11 @@
             </div>
 
             <div class="form-group">
+                    <label for="trailer">URL Trailer *</label>
+                    <input type="url" id="trailer" name="trailer" required>
+            </div>
+
+            <div class="form-group">
                 <label for="resumen">Resumen / Sinopsis *</label>
                 <textarea id="resumen" name="resumen" rows="5" required></textarea>
             </div>
@@ -134,6 +139,7 @@ async function loadMovieData() {
         document.getElementById('titulo').value = currentMovie.titulo;
         document.getElementById('poster').value = currentMovie.poster;
         document.getElementById('poster_large').value = currentMovie.poster_large;
+        document.getElementById('trailer').value = currentMovie.trailer
         document.getElementById('resumen').value = currentMovie.resumen;
         document.getElementById('veces_ganadora').value = currentMovie.veces_ganadora || 0;
         
@@ -166,7 +172,7 @@ function renderCategories(selectedCategories) {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-// LIMITAR MÁXIMO 5 CATEGORÍAS
+// LIMITAR MÁXIMO 10 CATEGORÍAS
 // ═══════════════════════════════════════════════════════════════════════════
 function limitCategories() {
     const checkboxes = document.querySelectorAll('input[name="categorias[]"]');
@@ -206,6 +212,7 @@ document.getElementById('editMovieForm').addEventListener('submit', async (e) =>
         titulo: formData.get('titulo'),
         poster: formData.get('poster'),
         poster_large: formData.get('poster_large'),
+        trailer: formData.get('trailer'),
         resumen: formData.get('resumen'),
         veces_ganadora: parseInt(formData.get('veces_ganadora')) || 0,
         categorias: categorias

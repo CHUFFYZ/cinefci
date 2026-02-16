@@ -475,7 +475,7 @@ function openAdminPage(page) {
         'suspender': 'admin-suspender.php',
         'eliminar': 'admin-eliminar.php'
     };
-    if (urls[page]) window.open(urls[page], '_blank');
+    if (urls[page]) window.open(urls[page], '_self');
     toggleSidebar();
 }
 

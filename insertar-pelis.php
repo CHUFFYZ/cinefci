@@ -18,11 +18,24 @@ $db->exec("CREATE TABLE IF NOT EXISTS peliculas (
     titulo TEXT NOT NULL,
     poster TEXT,
     poster_large TEXT,
+    trailer TEXT,
     resumen TEXT,
     votos INTEGER DEFAULT 0,
     veces_ganadora INTEGER DEFAULT 0
 )");
+/*
+// Verificar si la columna 'resumen' existe
+$result = $db->query("PRAGMA table_info(peliculas)");
+$columns = [];
+foreach ($result as $row) {
+    $columns[] = $row['name'];
+}
 
+// Si no existe, la agregamos
+if (!in_array('trailer', $columns)) {
+    $db->exec("ALTER TABLE peliculas ADD COLUMN trailer TEXT");
+}
+*/
 // Tabla de votos
 $db->exec("CREATE TABLE IF NOT EXISTS votos (
     id            INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -112,7 +125,8 @@ $categorias_default = [
     'Aventura',
     'Suspenso',
     'basura',
-    'Preferidas por el desarrollador'
+    'Preferidas por el desarrollador',
+    'De Temporada'
 ];
 
 $stmt = $db->prepare("INSERT OR IGNORE INTO categorias (nombre) VALUES (?)");
