@@ -31,8 +31,12 @@
                     <label for="poster_large">URL Poster (grande) *</label>
                     <input type="url" id="poster_large" name="poster_large" required>
                 </div>
+                <div class="form-group">
+                    <label for="trailer">URL Trailer *</label>
+                    <input type="url" id="trailer" name="trailer" required>
+                </div>
             </div>
-
+            
             <div class="form-group">
                 <label for="resumen">Resumen / Sinopsis *</label>
                 <textarea id="resumen" name="resumen" rows="5" required></textarea>
@@ -82,7 +86,7 @@ async function loadCategories() {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-// LIMITAR MÁXIMO 5 CATEGORÍAS
+// LIMITAR MÁXIMO  10 CATEGORÍAS
 // ═══════════════════════════════════════════════════════════════════════════
 function limitCategories() {
     const checkboxes = document.querySelectorAll('input[name="categorias[]"]');
@@ -121,6 +125,7 @@ document.getElementById('addMovieForm').addEventListener('submit', async (e) => 
         titulo: formData.get('titulo'),
         poster: formData.get('poster'),
         poster_large: formData.get('poster_large'),
+        trailer: formData.get('trailer'),
         resumen: formData.get('resumen'),
         categorias: categorias
     };
