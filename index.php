@@ -10,9 +10,9 @@
     
     <link rel="stylesheet" href="css/index.css">
     <meta name="theme-color" content="#e50914">
-    <link rel="apple-touch-icon" href="image/logo/logo2.svg">
-    <link rel="icon" type="image/png" href="image/logo/logo2.svg">
-    <link rel="shortcut icon" type="image/png" href="image/logo/logo2.svg">
+    <link rel="apple-touch-icon" href="image/logo/logo2.pgn">
+    <link rel="icon" type="image/png" href="image/logo/logo2.png">
+    <link rel="shortcut icon" type="image/png" href="image/logo/logo2.png">
     <link rel="manifest" href="manifest.json">
 
     <script>
