@@ -4,365 +4,48 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>CineFCI - Catálogo de Películas</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Montserrat:wght@300;400;600;700&display=swap" rel="stylesheet">
-    <link rel="icon" type="image/png" href="image/logo/logo.png">
+    
     <link rel="stylesheet" href="css/index.css">
+    <meta name="theme-color" content="#e50914">
+    <link rel="apple-touch-icon" href="image/logo/logo.svg">
+    <link rel="icon" type="image/png" href="image/logo/logo.svg">
+    <link rel="shortcut icon" type="image/png" href="image/logo/log.svg">
+    <link rel="manifest" href="manifest.json">
 
-    <!-- ══════════════════════════════════════════════════════
-         ESTILOS DEL CHAT POPUP
-    ══════════════════════════════════════════════════════ -->
-    <style>
-    /* ── CHAT BUBBLE (bolita flotante) ── */
-    #chat-bubble {
-        position: fixed;
-        bottom: 55px;
-        left: 24px;
-        width: 56px;
-        height: 56px;
-        background: linear-gradient(135deg, #e50914 0%, #b00710 100%);
-        border-radius: 50%;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        cursor: pointer;
-        z-index: 3000;
-        box-shadow: 0 4px 20px rgba(229,9,20,0.5);
-        transition: transform 0.25s ease, box-shadow 0.25s ease;
-        border: none;
+    <script>
+    if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+        navigator.serviceWorker.register('sw.js')
+            .then(reg => console.log('CINE-FCI: Listo para instalar'))
+            .catch(err => console.log('Error de registro PWA', err));
+        });
     }
-    #chat-bubble:hover {
-        transform: scale(1.1);
-        box-shadow: 0 6px 28px rgba(229,9,20,0.7);
-    }
-    #chat-bubble svg { pointer-events: none; }
-
-    /* Badge de mensajes no leídos */
-    #chat-unread {
-        position: absolute;
-        top: -4px;
-        right: -4px;
-        background: #ffd700;
-        color: #0a0a0a;
-        font-family: 'Montserrat', sans-serif;
-        font-size: 11px;
-        font-weight: 900;
-        width: 20px;
-        height: 20px;
-        border-radius: 50%;
-        display: none;
-        align-items: center;
-        justify-content: center;
-        border: 2px solid #0a0a0a;
-    }
-
-    /* ── CHAT POPUP PANEL ── */
-    #chat-popup {
-        position: fixed;
-        bottom: 120px;
-        left: 24px;
-        width: 340px;
-        height: 500px;
-        background: #141414;
-        border-radius: 18px;
-        border: 1px solid rgba(229,9,20,0.3);
-        box-shadow: 0 20px 60px rgba(0,0,0,0.8), 0 0 0 1px rgba(229,9,20,0.1);
-        display: flex;
-        flex-direction: column;
-        z-index: 2999;
-        overflow: hidden;
-        /* Estado CERRADO */
-        opacity: 0;
-        transform: translateY(20px) scale(0.95);
-        transform-origin: bottom left;
-        pointer-events: none;
-        transition: opacity 0.25s ease, transform 0.25s ease;
-    }
-    #chat-popup.open {
-        opacity: 1;
-        transform: translateY(0) scale(1);
-        pointer-events: all;
-    }
-
-    /* Header del chat */
-    .chat-header {
-        background: linear-gradient(135deg, #e50914 0%, #b00710 100%);
-        padding: 14px 16px;
-        display: flex;
-        align-items: center;
-        gap: 10px;
-        flex-shrink: 0;
-    }
-    .chat-header-avatar {
-        width: 36px;
-        height: 36px;
-        background: rgba(0,0,0,0.3);
-        border-radius: 50%;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        font-size: 18px;
-        flex-shrink: 0;
-    }
-    .chat-header-info { flex: 1; min-width: 0; }
-    .chat-header-title {
-        font-family: 'Bebas Neue', cursive;
-        font-size: 1.15rem;
-        letter-spacing: 0.08em;
-        line-height: 1.1;
-    }
-    .chat-header-sub {
-        font-size: 10px;
-        opacity: 0.85;
-        font-weight: 300;
-        letter-spacing: 0.05em;
-        white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
-    }
-    .chat-close-btn {
-        background: rgba(0,0,0,0.25);
-        border: none;
-        color: #fff;
-        width: 28px;
-        height: 28px;
-        border-radius: 50%;
-        font-size: 16px;
-        cursor: pointer;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        line-height: 1;
-        transition: background 0.2s;
-        flex-shrink: 0;
-    }
-    .chat-close-btn:hover { background: rgba(0,0,0,0.5); }
-
-    /* Setup de nombre */
-    #chat-name-setup {
-        flex: 1;
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        justify-content: center;
-        padding: 24px;
-        gap: 14px;
-    }
-    #chat-name-setup p {
-        font-size: 0.85rem;
-        color: #8c8c8c;
-        text-align: center;
-        line-height: 1.6;
-    }
-    #chat-name-setup strong { color: #ffd700; }
-    .chat-name-input {
-        width: 100%;
-        background: #2f2f2f;
-        border: 2px solid transparent;
-        border-radius: 10px;
-        padding: 12px 14px;
-        color: #fff;
-        font-family: 'Montserrat', sans-serif;
-        font-size: 0.95rem;
-        outline: none;
-        transition: border-color 0.2s;
-        text-align: center;
-    }
-    .chat-name-input:focus { border-color: #e50914; }
-    .chat-name-btn {
-        width: 100%;
-        background: linear-gradient(135deg, #e50914, #b00710);
-        border: none;
-        border-radius: 10px;
-        padding: 12px;
-        color: #fff;
-        font-family: 'Montserrat', sans-serif;
-        font-size: 0.9rem;
-        font-weight: 700;
-        cursor: pointer;
-        transition: opacity 0.2s, transform 0.1s;
-        letter-spacing: 0.05em;
-        text-transform: uppercase;
-    }
-    .chat-name-btn:hover { opacity: 0.85; transform: translateY(-1px); }
-
-    /* Config deshabilitado */
-    #chat-disabled-msg {
-        flex: 1;
-        display: none;
-        flex-direction: column;
-        align-items: center;
-        justify-content: center;
-        padding: 24px;
-        text-align: center;
-        gap: 12px;
-        color: #8c8c8c;
-    }
-    #chat-disabled-msg span { font-size: 3rem; }
-    #chat-disabled-msg p { font-size: 0.85rem; line-height: 1.6; }
-
-    /* Área de mensajes */
-    #chat-messages-area {
-        flex: 1;
-        overflow-y: auto;
-        padding: 14px 12px;
-        display: flex;
-        flex-direction: column;
-        gap: 3px;
-        scroll-behavior: smooth;
-    }
-    #chat-messages-area::-webkit-scrollbar { width: 4px; }
-    #chat-messages-area::-webkit-scrollbar-track { background: transparent; }
-    #chat-messages-area::-webkit-scrollbar-thumb { background: #2f2f2f; border-radius: 2px; }
-
-    /* Grupos de mensajes */
-    .chat-msg-group { display: flex; flex-direction: column; gap: 2px; margin-bottom: 6px; }
-    .chat-msg-group.mine { align-items: flex-end; }
-    .chat-msg-group.other { align-items: flex-start; }
-
-    .chat-msg-sender {
-        font-size: 10px;
-        font-weight: 700;
-        letter-spacing: 0.04em;
-        padding: 0 4px;
-        margin-bottom: 2px;
-        text-transform: uppercase;
-    }
-    .chat-msg-group.mine .chat-msg-sender { display: none; }
-
-    .chat-msg-bubble {
-        max-width: 82%;
-        padding: 8px 12px;
-        border-radius: 16px;
-        font-size: 13px;
-        line-height: 1.5;
-        word-break: break-word;
-        font-family: 'Montserrat', sans-serif;
-        font-weight: 400;
-    }
-    .chat-msg-group.other .chat-msg-bubble {
-        background: #2f2f2f;
-        color: #fff;
-        border-bottom-left-radius: 5px;
-    }
-    .chat-msg-group.other .chat-msg-bubble:last-of-type {
-        border-bottom-left-radius: 16px;
-    }
-    .chat-msg-group.mine .chat-msg-bubble {
-        background: linear-gradient(135deg, #e50914, #b00710);
-        color: #fff;
-        border-bottom-right-radius: 5px;
-    }
-    .chat-msg-group.mine .chat-msg-bubble:last-of-type {
-        border-bottom-right-radius: 16px;
-    }
-    .chat-msg-time {
-        font-size: 9px;
-        color: #8c8c8c;
-        padding: 0 4px;
-        margin-top: 1px;
-    }
-
-    /* Mensajes del sistema */
-    .chat-msg-system {
-        text-align: center;
-        margin: 4px 0;
-    }
-    .chat-msg-system span {
-        background: rgba(255,255,255,0.05);
-        color: #8c8c8c;
-        font-size: 10px;
-        padding: 3px 10px;
-        border-radius: 20px;
-        font-family: 'Montserrat', sans-serif;
-        font-weight: 400;
-    }
-
-    /* Typing indicator */
-    #chat-typing {
-        padding: 2px 12px 6px;
-        font-size: 10px;
-        color: #8c8c8c;
-        font-style: italic;
-        min-height: 20px;
-        font-family: 'Montserrat', sans-serif;
-        flex-shrink: 0;
-    }
-
-    /* Input area */
-    .chat-input-area {
-        padding: 10px 12px;
-        background: #0a0a0a;
-        border-top: 1px solid rgba(255,255,255,0.06);
-        display: flex;
-        gap: 8px;
-        align-items: center;
-        flex-shrink: 0;
-    }
-    .chat-input {
-        flex: 1;
-        background: #2f2f2f;
-        border: 1px solid transparent;
-        border-radius: 20px;
-        padding: 9px 14px;
-        color: #fff;
-        font-family: 'Montserrat', sans-serif;
-        font-size: 13px;
-        outline: none;
-        transition: border-color 0.2s;
-        resize: none;
-    }
-    .chat-input:focus { border-color: rgba(229,9,20,0.5); }
-    .chat-input::placeholder { color: #8c8c8c; }
-
-    .chat-send-btn {
-        width: 36px;
-        height: 36px;
-        background: linear-gradient(135deg, #e50914, #b00710);
-        border: none;
-        border-radius: 50%;
-        color: #fff;
-        cursor: pointer;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        flex-shrink: 0;
-        transition: opacity 0.2s, transform 0.1s;
-    }
-    .chat-send-btn:hover { opacity: 0.85; transform: scale(1.08); }
-    .chat-send-btn:active { transform: scale(0.95); }
-
-    /* Mi nombre badge en footer */
-    .chat-my-name {
-        font-size: 10px;
-        color: #8c8c8c;
-        padding: 0 12px 6px;
-        display: flex;
-        align-items: center;
-        gap: 5px;
-        flex-shrink: 0;
-    }
-    .chat-my-name strong {
-        color: #ffd700;
-        cursor: pointer;
-        text-decoration: underline dotted;
-    }
-    .chat-my-name strong:hover { color: #ffed4e; }
-
-    /* Mobile adjustments */
-    @media (max-width: 400px) {
-        #chat-popup {
-            left: 10px;
-            right: 10px;
-            width: auto;
-            bottom: 90px;
-        }
-        #chat-bubble {
-            bottom: 20px;
-            left: 16px;
-        }
-    }
-    </style>
+    </script>
 </head>
+<style>
+    .galeria { 
+    display: flex; 
+    overflow-x: scroll; 
+    scroll-snap-type: x mandatory; 
+    /*
+    width: 100%; 
+    height: 400px; /* ajusta según tu diseño */ 
+    } 
+    .galeria img { 
+        flex: 0 0 100%; 
+        scroll-snap-align: center; 
+        object-fit: cover; 
+        }
+    .galeria iframe{
+        flex: 0 0 100%; 
+        scroll-snap-align: center; 
+        object-fit: cover; 
+    }
+    .galeria { scroll-behavior: smooth; }
+</style>
 <body>
     <div class="Luffy">
         <a href="https://www.facebook.com/share/1GUid3qsoS/" target="_blank">By Creador UNIMAP</a>
@@ -394,6 +77,8 @@
     <!-- FILTROS DE CATEGORÍA -->
     <div class="filter-section">
         <button class="filter-btn active" onclick="filterByCategory('')">Todas</button>
+        <button class="filter-btn" onclick="sortMovies('az')">A-Z</button>
+        <button class="filter-btn" onclick="sortMovies('popularidad')">Pop</button>
         <button id="expandFiltersBtn" class="expand-btn" onclick="toggleFilters()">
             <img src="image/iconos/flecha-abajo.png" alt="Más filtros" class="expand-icon">
         </button>
@@ -409,7 +94,12 @@
 <div class="modal" id="movieModal">
     <div class="modal-content">
         <button class="close-modal" onclick="closeModal()">×</button>
-        <img class="modal-poster" id="modalPoster" src="" alt="">
+        <div class="galeria">
+            <img class="modal-poster" id="modalPoster" src="" alt="">
+            
+            <iframe class="modal-trailer" id="modalTrailer" src="" alt="" title="Trailer" frameborder="0" allow="autoplay">
+            </iframe>
+        </div>
         <div class="modal-info">
             <h2 class="modal-title" id="modalTitle"></h2>
             <div class="modal-categories" id="modalCategories"></div>
@@ -447,7 +137,7 @@
     <div class="chat-header">
         <div class="chat-header-avatar">🎬</div>
         <div class="chat-header-info">
-            <div class="chat-header-title">Movie Night Chat</div>
+            <div class="chat-header-title">Chat CINE-FCI</div>
             <div class="chat-header-sub" id="chat-online-sub">Cargando...</div>
         </div>
         <button class="chat-close-btn" onclick="toggleChat()">×</button>
@@ -461,7 +151,7 @@
 
     <!-- Setup nombre (primera vez) -->
     <div id="chat-name-setup" style="display:none;">
-        <p>¡Bienvenido al chat de <strong>Movie Night</strong>!<br>Elige un nombre para que tus amigos te vean.</p>
+        <p>¡Bienvenido al chat de <strong>CINE-FCI</strong>!<br>Elige un nombre para que tus amigos te vean.</p>
         <input class="chat-name-input" id="chat-name-input" type="text" 
                placeholder="Tu apodo..." maxlength="20"
                onkeydown="if(event.key==='Enter') saveChatName()">
@@ -628,12 +318,13 @@ function renderMovies(movies) {
                 else timeRemaining = `${minutes}m`;
             }
         }
-        
+        /*${isSuspended ? 'suspended' : ''} */
+        /*
         return `
-            <div class="movie-card ${isSuspended ? 'suspended' : ''}">
+            <div class="movie-card ">
                 ${isMasVotada ? '<div class="ribbon-badge">🏆 Más Votada</div>' : ''}
                 ${isSuspended ? `<div class="suspension-badge">⏸ Suspendida<br><span class="countdown">${timeRemaining}</span></div>` : ''}
-                <img src="${m.poster}" alt="${m.titulo}" class="movie-poster" 
+                <img src="${m.poster}" alt="${m.titulo}" class="movie-poster ${isSuspended ? 'suspended' : ''}" 
                      onerror="this.src='image/no-poster.png'" onclick="openModal(${m.id})">
                 <div class="movie-info">
                     <div class="movie-title">${m.titulo}</div>
@@ -641,6 +332,21 @@ function renderMovies(movies) {
                             onclick="voteForMovie(${m.id}, event)"
                             ${m.ya_voto || isSuspended ? 'disabled' : ''}>
                         ${isSuspended ? '⏸ Suspendida' : (m.ya_voto ? `★ Tu voto (${m.votos})` : `Votar por esta (${m.votos})`)}
+                    </button>
+                </div>
+            </div>
+        `;*/
+        return `
+            <div class="movie-card ">
+                ${isMasVotada ? '<div class="ribbon-badge">🏆 Más Votada</div>' : ''}
+                <img src="${m.poster}" alt="${m.titulo}" class="movie-poster ${isSuspended ? 'suspended' : ''}" 
+                     onerror="this.src='image/no-poster.png'" onclick="openModal(${m.id})">
+                <div class="movie-info">
+                    <div class="movie-title">${m.titulo}</div>
+                    <button class="vote-btn ${m.ya_voto ? 'voted' : ''} ${isSuspended ? 'disabled' : ''}" 
+                            onclick="voteForMovie(${m.id}, event)"
+                            ${m.ya_voto || isSuspended ? 'disabled' : ''}>
+                        ${isSuspended ? `⏸ Suspendida: (${timeRemaining})`: (m.ya_voto ? `★ Tu voto (${m.votos})` : `Votar por esta (${m.votos})`)}
                     </button>
                 </div>
             </div>
@@ -659,7 +365,27 @@ function filterByCategory(categoria) {
     const container = document.getElementById('categoryFilters');
     if (container.classList.contains('expanded')) toggleFilters();
 }
+// ═══════════════════════════════════════════════════════════════════════════
+// ORDENAR PELÍCULAS
+// ═══════════════════════════════════════════════════════════════════════════
+function sortMovies(criterio) {
+    // Marcamos el botón como activo visualmente
+    document.querySelectorAll('.filter-btn').forEach(btn => btn.classList.remove('active'));
+    event.target.classList.add('active');
 
+    if (criterio === 'az') {
+        // Ordenar de la A a la Z por el título
+        currentMovies.sort((a, b) => a.titulo.localeCompare(b.titulo));
+    } 
+    else if (criterio === 'popularidad') {
+        // Ordenar de mayor a menor número de votos
+        // Asegúrate de que 'votos' sea tratado como número
+        currentMovies.sort((a, b) => Number(b.votos) - Number(a.votos));
+    }
+
+    // Volvemos a pintar las películas ya ordenadas
+    renderMovies(currentMovies);
+}
 // ═══════════════════════════════════════════════════════════════════════════
 // VOTAR
 // ═══════════════════════════════════════════════════════════════════════════
@@ -718,31 +444,7 @@ async function rateMovie(id, rating) {
 // ═══════════════════════════════════════════════════════════════════════════
 // MODAL
 // ═══════════════════════════════════════════════════════════════════════════
-async function openModal(movieId) {
-    const movie = currentMovies.find(m => m.id == movieId);
-    if (!movie) return;
 
-    document.getElementById('modalPoster').src = movie.poster_large || movie.poster;
-    document.getElementById('modalTitle').textContent = movie.titulo;
-    document.getElementById('modalSummary').textContent = movie.resumen;
-
-    const categoriesContainer = document.getElementById('modalCategories');
-    if (movie.categorias && movie.categorias.length > 0) {
-        categoriesContainer.innerHTML = movie.categorias.map(cat => 
-            `<span class="category-tag">${cat}</span>`
-        ).join('');
-    } else {
-        categoriesContainer.innerHTML = '';
-    }
-
-    updateAverageRating(movie);
-    renderStars(movie);
-    document.getElementById('movieModal').classList.add('active');
-}
-
-function closeModal() {
-    document.getElementById('movieModal').classList.remove('active');
-}
 
 function renderStars(movie) {
     const container = document.getElementById('starsContainer');
@@ -822,6 +524,7 @@ window.addEventListener('load', async () => {
 });
 </script>
 <script src="js/textos-coneccion.js"></script>
+<script src="js/modal/video.js" ></script>
 
 
 <!-- ══════════════════════════════════════════════════════════════
@@ -1218,6 +921,37 @@ function updateUnreadBadge() {
     initChat();
     loadUserName();
 })();
+// Solo una vez, cuando carga la página
+document.addEventListener('DOMContentLoaded', () => {
+    const trailer = document.getElementById('modalTrailer');
+
+    if (!trailer) return;
+
+    const observer = new IntersectionObserver((entries) => {
+        entries.forEach(entry => {
+            if (entry.isIntersecting && trailer.dataset.baseSrc) {
+                // Solo la primera vez que entra en vista
+                const autoplayUrl = trailer.dataset.baseSrc + '&autoplay=1';
+                trailer.src = autoplayUrl;
+
+                // Opcional: para pausar si sale de vista (requiere enablejsapi=1)
+                // trailer.dataset.baseSrc = null; // evita recargar múltiples veces
+
+                observer.unobserve(trailer); // deja de observar (una sola vez)
+            }
+        });
+    }, {
+        threshold: 0.6,          // reproduce cuando ~60% del iframe esté visible
+        rootMargin: '0px'        // o '-50px' si quieres que detecte un poco antes
+    });
+
+    // Observa siempre que el modal esté abierto (o reinicia si cierras modal)
+    // Pero como el modal se abre/cierra, puedes observar una vez al cargar
+    observer.observe(trailer);
+
+    // Opcional: si cierras el modal y lo vuelves a abrir, reinicia src a base
+    // Puedes agregar un listener al cerrar modal: trailer.src = ''; trailer.removeAttribute('data-base-src');
+});
 </script>
 
 </body>
