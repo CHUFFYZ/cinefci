@@ -26,25 +26,7 @@
     </script>
 </head>
 <style>
-    .galeria { 
-    display: flex; 
-    overflow-x: scroll; 
-    scroll-snap-type: x mandatory; 
-    /*
-    width: 100%; 
-    height: 400px; /* ajusta según tu diseño */ 
-    } 
-    .galeria img { 
-        flex: 0 0 100%; 
-        scroll-snap-align: center; 
-        object-fit: cover; 
-        }
-    .galeria iframe{
-        flex: 0 0 100%; 
-        scroll-snap-align: center; 
-        object-fit: cover; 
-    }
-    .galeria { scroll-behavior: smooth; }
+    
 </style>
 <body>
     <div class="Luffy">
