@@ -1,0 +1,99 @@
+1. cambiar la conraseña del correo
+cine.fci.soporte@gmail.com
+2. cambiar la contraseña
+cg7030295
+3. cambia numero de recuperacion o telefono de recuperacion
+
+4.Inicia sesion en github con gmail
+5.inicia sesion en https://turso.tech/ mediante github
+6.instala lo necesario, si requieres ayuda la documentacion esta en : https://docs.turso.tech/cli/introduction
+
+
+/*---------------------------------------------------------------------------------------------------------*/
+# Guía de Migración: SQLite (XAMPP) a Turso vía WSL2
+
+## 1. Requisitos Previos
+
+* Tener **WSL2 (Ubuntu)** instalado en Windows.
+* Tener un proyecto en **XAMPP** con una base de datos `.db` activa.
+* Cuenta en [Turso.tech]().
+
+## 2. Preparación del Entorno (WSL2)
+
+No intentes usar PowerShell o Git Bash para la instalación de Turso, ya que suelen presentar errores de ejecución. Usa Ubuntu:
+
+1. **Abrir Ubuntu** desde el menú Inicio.
+2. **Instalar Turso CLI:**
+```bash
+curl -sSfL https://get.tur.so/install.sh | bash
+source ~/.bashrc
+
+```
+
+
+3. **Instalar SQLite3 en Linux:**
+```bash
+sudo apt update && sudo apt install sqlite3 -y
+
+```
+
+
+
+## 3. Autenticación "Headless"
+
+En WSL, el navegador no siempre se abre solo. Usa el modo manual:
+
+1. Ejecuta: `turso auth login --headless`
+2. Copia la URL que aparece y pégala en tu navegador de Windows.
+3. Copia el código que te da el navegador y pégalo en la terminal de Ubuntu.
+
+## 4. Migración de Datos
+
+Para mover los datos, primero debemos exportarlos a un archivo de texto SQL y luego subirlos a la nube.
+
+### A. Exportar desde Windows a SQL
+
+Navega a la carpeta de tu proyecto (WSL accede a tu disco C: mediante `/mnt/c/`) y crea un "volcado" de datos:
+
+```bash
+# Cambia a la ruta de tu proyecto
+cd /mnt/c/xampp/htdocs/TU_PROYECTO
+
+# Exportar la DB local a un archivo .sql
+sqlite3 db/peliculas.db .dump > backup_migracion.sql
+
+```
+
+### B. Crear e Importar en Turso
+
+1. **Crear base de datos:** `turso db create nombre_db`.
+2. **Subir los datos:**
+```bash
+turso db shell nombre_db < backup_migracion.sql
+
+```
+
+
+> **Error común:** No ejecutes el archivo `.sql` directamente (ej. `./archivo.sql`). Debes usar el símbolo `<` para pasárselo al shell de Turso.
+
+
+
+## 5. Credenciales de Conexión
+
+Para que tu código PHP funcione, necesitas obtener estos valores finales:
+
+* **URL de la DB:** `turso db show nombre_db --url` (Ejemplo: `libsql://...`).
+* **Token de acceso:** `turso db tokens create nombre_db`.
+
+---
+
+## Solución de Errores Comunes (Troubleshooting)
+
+|          Error              |                               Causa                                      |                                     Solución                                    |
+| ----------------------------| ------------------------------------------------------------------------ | --------------------------------------------------------------------------------|
+| `Command 'turso' not found` | No se actualizó el perfil de Linux.                                      | Ejecuta `source ~/.bashrc`.                                                     |
+| `Unexpected token 'login'`  | Estás usando `tursodb.exe` (motor SQL) en lugar de `turso.exe` (gestor). | Usa la instalación oficial en WSL o el CLI completo de 30MB+.                   |
+| `WSL/InstallDistro/...`     | Ubuntu ya está instalado pero no abierto.                                | Busca "Ubuntu" en el menú Inicio de Windows en lugar de reinstalar.             |
+| `Permission Denied (sudo)`  | Olvidaste la contraseña de Ubuntu.                                       | En PowerShell ejecuta `wsl -u root` y luego `passwd tu_usuario` para cambiarla. |
+
+---

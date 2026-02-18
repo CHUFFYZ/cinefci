@@ -1,0 +1,11 @@
+services:
+  app:
+    build: .
+    ports:
+      - "8080:80"
+    environment:
+      # Sustituye con los valores que obtuviste en WSL
+      - https://cinefci-bychuffy.aws-us-east-1.turso.io
+      - eyJhbGciOiJFZERTQSIsInR5cCI6IkpXVCJ9.eyJpYXQiOjE3NzEzNjkyODUsImlkIjoiNzhhZmZiM2EtYzNmYy00NWQwLTgwZWEtZjRjOGQ0NDQ2NjM1IiwicmlkIjoiY2I3YTc4NzUtMDllMS00NGM5LWI4OWEtNzc0ODQyYTdkMTkwIn0.8Cs_zHfIqa998uGAjgSgfpflD5gspw_QvT_RiDfVlHPQV1Rb0MJuSQI5dIl7GEDrRKZ5tYsqGF8ucfgBDM3QCg
+    volumes:
+      - .:/var/www/html

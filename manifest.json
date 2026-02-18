@@ -1,0 +1,22 @@
+{
+  "name": "CINE-FCI Catálogo de Películas",
+  "short_name": "CINE-FCI",
+  "description": "Vota, califica y ve el resumen de tus películas favoritas.",
+  "start_url": "index.php",
+  "display": "standalone",
+  "background_color": "#1a1a1a",
+  "theme_color": "#e50914",
+  "icons": [
+    {
+      "src": "image/logo/logo3.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "image/logo/logo3.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}
