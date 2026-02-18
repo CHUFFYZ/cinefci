@@ -1,3 +1,7 @@
+<?php
+require_once __DIR__ . '/auth.php';
+requireLogin();
+?>
 <!DOCTYPE html>
 <html lang="es">
 <head>
@@ -304,7 +308,7 @@
                 Ver Catálogo
             </a>
             <div class="nav-divider"></div>
-            <a href="config_texto.php" class="nav-item" target="_blank">
+            <a href="config_texto.php" class="nav-item" >
                 <span class="icon">⚙️</span>
                 Configuración
             </a>
@@ -325,6 +329,10 @@
                 </div>
             </div>
         </div>
+        <button class="reset-btn">
+            <a href="logout.php" style="color:white;">Cerrar sesión (<?= currentAdmin() ?>)</a>
+        </button>
+        
     </header>
 
     <main>
