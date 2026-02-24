@@ -298,6 +298,10 @@ requireLogin();
                 <span class="icon">⏸️</span>
                 Suspender Película
             </a>
+            <a href="#" class="nav-item" onclick="openAdminPage('ocultar')">
+                <span class="icon">👁️</span>
+                Ocultar de Cartelera
+            </a>
             <a href="#" class="nav-item" onclick="openAdminPage('eliminar')">
                 <span class="icon">🗑️</span>
                 Eliminar Película
@@ -481,6 +485,7 @@ function openAdminPage(page) {
         'agregar': 'admin-agregar.php',
         'modificar': 'admin-modificar.php',
         'suspender': 'admin-suspender.php',
+        'ocultar': 'admin-ocultar.php',
         'eliminar': 'admin-eliminar.php'
     };
     if (urls[page]) window.open(urls[page], '_self');

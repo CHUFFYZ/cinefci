@@ -14,6 +14,16 @@ try {
     die(json_encode(['error' => 'No se pudo conectar a Turso: ' . $e->getMessage()]));
 }
 
+// Asegurar que la tabla de ocultación existe
+try {
+    $db->exec("CREATE TABLE IF NOT EXISTS peliculas_ocultas (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        pelicula_id INTEGER NOT NULL UNIQUE,
+        fecha_inicio DATETIME DEFAULT CURRENT_TIMESTAMP,
+        fecha_fin DATETIME NULL
+    )");
+} catch (Exception $e) { /* ya existe, ignorar */ }
+
 $method = $_SERVER['REQUEST_METHOD'];
 $action = $_GET['action'] ?? '';
 
@@ -35,13 +45,18 @@ if ($method === 'GET') {
                 (SELECT calificacion FROM calificaciones WHERE pelicula_id = p.id AND browser_id = ? LIMIT 1) AS user_rating,
                 (SELECT fecha_finalizacion FROM suspensiones WHERE pelicula_id = p.id LIMIT 1) AS fecha_suspension
             FROM peliculas p
+            LEFT JOIN peliculas_ocultas po ON po.pelicula_id = p.id
+            WHERE (
+                po.pelicula_id IS NULL
+                OR (po.fecha_fin IS NOT NULL AND datetime(po.fecha_fin) <= datetime('now'))
+            )
         ";
 
         $params = [$browser_id, $browser_id];
 
         if (!empty($categoria_filtro)) {
             $sql .= "
-                WHERE p.id IN (
+                AND p.id IN (
                     SELECT pc.pelicula_id 
                     FROM pelicula_categorias pc
                     INNER JOIN categorias c ON pc.categoria_id = c.id
@@ -198,7 +213,133 @@ if ($method === 'GET') {
         exit;
     }
 
+    // ═══════════════════════════════════════════════════════════════════════════
+    // LISTAR PELÍCULAS CON ESTADO DE OCULTACIÓN (para admin-ocultar.php)
+    // ═══════════════════════════════════════════════════════════════════════════
+    if ($action === 'movies_with_hidden') {
+        try {
+            // Crear tabla si no existe (exec para DDL)
+            $db->exec("
+                CREATE TABLE IF NOT EXISTS peliculas_ocultas (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    pelicula_id INTEGER NOT NULL UNIQUE,
+                    fecha_inicio DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    fecha_fin DATETIME NULL
+                )
+            ");
+        } catch (Exception $e) {
+            // Ignorar error si la tabla ya existe
+        }
+
+        try {
+            $sql = "
+                SELECT 
+                    p.id,
+                    p.titulo,
+                    o.fecha_fin AS fecha_fin_oculta,
+                    CASE WHEN o.pelicula_id IS NOT NULL THEN 1 ELSE 0 END AS oculta
+                FROM peliculas p
+                LEFT JOIN peliculas_ocultas o ON o.pelicula_id = p.id
+                ORDER BY p.titulo
+            ";
+
+            $stmt = $db->query($sql);
+            $peliculas = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+            foreach ($peliculas as &$pelicula) {
+                // Turso devuelve todo como string — forzar tipos correctos
+                $pelicula['oculta'] = (int)$pelicula['oculta'];
+                $pelicula['fecha_fin_oculta'] = $pelicula['fecha_fin_oculta']; // puede ser null
+
+                // Si ya venció la ocultación temporal, marcar como visible
+                if ($pelicula['oculta'] === 1 && $pelicula['fecha_fin_oculta'] !== null) {
+                    if (strtotime($pelicula['fecha_fin_oculta']) < time()) {
+                        $pelicula['oculta'] = 0;
+                    }
+                }
+            }
+
+            echo json_encode($peliculas);
+        } catch (Exception $e) {
+            http_response_code(500);
+            echo json_encode(['error' => 'Error al cargar películas: ' . $e->getMessage()]);
+        }
+        exit;
+    }
+
 } elseif ($method === 'POST') {
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // OCULTAR PELÍCULA DE CARTELERA
+    // ═══════════════════════════════════════════════════════════════════════════
+    if ($action === 'hide_movie') {
+        $data = json_decode(file_get_contents('php://input'), true) ?: [];
+
+        $pelicula_id = (int)($data['pelicula_id'] ?? 0);
+        $fecha_fin   = (isset($data['fecha_fin']) && $data['fecha_fin'] !== null && $data['fecha_fin'] !== '')
+                       ? $data['fecha_fin']
+                       : null;
+
+        if ($pelicula_id < 1) {
+            http_response_code(400);
+            die(json_encode(['success' => false, 'message' => 'ID inválido']));
+        }
+
+        try {
+            // Crear tabla si no existe
+            try {
+                $db->exec("
+                    CREATE TABLE IF NOT EXISTS peliculas_ocultas (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        pelicula_id INTEGER NOT NULL UNIQUE,
+                        fecha_inicio DATETIME DEFAULT CURRENT_TIMESTAMP,
+                        fecha_fin DATETIME NULL
+                    )
+                ");
+            } catch (Exception $e) { /* tabla ya existe */ }
+
+            // Verificar si ya existe
+            $stmt_check = $db->prepare("SELECT id FROM peliculas_ocultas WHERE pelicula_id = ?");
+            $stmt_check->execute([$pelicula_id]);
+
+            if ($stmt_check->fetch()) {
+                $stmt = $db->prepare("UPDATE peliculas_ocultas SET fecha_fin = ?, fecha_inicio = CURRENT_TIMESTAMP WHERE pelicula_id = ?");
+                $stmt->execute([$fecha_fin, $pelicula_id]);
+            } else {
+                $stmt = $db->prepare("INSERT INTO peliculas_ocultas (pelicula_id, fecha_fin) VALUES (?, ?)");
+                $stmt->execute([$pelicula_id, $fecha_fin]);
+            }
+
+            echo json_encode(['success' => true, 'message' => 'Película ocultada de la cartelera']);
+        } catch (Exception $e) {
+            http_response_code(500);
+            echo json_encode(['success' => false, 'message' => 'Error: ' . $e->getMessage()]);
+        }
+        exit;
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // DESOCULTAR PELÍCULA
+    // ═══════════════════════════════════════════════════════════════════════════
+    if ($action === 'unhide_movie') {
+        $data = json_decode(file_get_contents('php://input'), true) ?: [];
+        $pelicula_id = (int)($data['pelicula_id'] ?? 0);
+
+        if ($pelicula_id < 1) {
+            http_response_code(400);
+            die(json_encode(['success' => false, 'message' => 'ID inválido']));
+        }
+
+        try {
+            $stmt = $db->prepare("DELETE FROM peliculas_ocultas WHERE pelicula_id = ?");
+            $stmt->execute([$pelicula_id]);
+            echo json_encode(['success' => true, 'message' => 'Película visible en cartelera nuevamente']);
+        } catch (Exception $e) {
+            http_response_code(500);
+            echo json_encode(['success' => false, 'message' => 'Error: ' . $e->getMessage()]);
+        }
+        exit;
+    }
 
     // ═══════════════════════════════════════════════════════════════════════════
     // RESETEAR VOTOS
