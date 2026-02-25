@@ -11,6 +11,30 @@ requireLogin();
     <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Montserrat:wght@300;400;600;700;900&display=swap" rel="stylesheet">
     <link rel="icon" type="image/png" href="image/logo/logo.png">
     <link rel="stylesheet" href="css/admin.css">
+<style>
+.dur-btn {
+    background: rgba(255,255,255,0.05);
+    border: 1px solid rgba(255,255,255,0.15);
+    color: #ccc;
+    padding: 7px 14px;
+    border-radius: 7px;
+    font-family: 'Montserrat', sans-serif;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+.dur-btn:hover, .dur-btn.active {
+    background: rgba(0,200,83,0.2);
+    border-color: #00c853;
+    color: #00e676;
+}
+.dur-btn.dur-indef.active {
+    background: rgba(100,100,255,0.2);
+    border-color: #7986cb;
+    color: #9fa8da;
+}
+</style>
 </head>
 <body>
     <div class="admin-container">
@@ -54,6 +78,28 @@ requireLogin();
                 <small class="form-hint">Selecciona entre 1 y 10 categorías</small>
             </div>
 
+            <!-- SELLO NUEVA -->
+            <div class="form-group" style="background:rgba(0,200,83,0.06); border:1px solid rgba(0,200,83,0.25); border-radius:12px; padding:20px;">
+                <label style="display:flex; align-items:center; gap:10px; cursor:pointer; margin-bottom:14px;">
+                    <input type="checkbox" id="marcar_nueva" onchange="toggleNuevaOptions()" style="width:18px;height:18px;accent-color:#00c853;">
+                    <span style="font-weight:700; color:#00c853;">✨ Marcar como "Nuevo en Cartelera"</span>
+                </label>
+                <div id="nuevaOptions" style="display:none;">
+                    <p style="font-size:12px; color:#8c8c8c; margin-bottom:12px;">Elige hasta cuándo mostrar el sello. Si no seleccionas fecha, se puede quitar manualmente desde el panel.</p>
+                    <div style="display:flex; flex-wrap:wrap; gap:8px; margin-bottom:12px;" id="duracionBtns">
+                        <button type="button" class="dur-btn" onclick="setNuevaDuration(3)">3 días</button>
+                        <button type="button" class="dur-btn" onclick="setNuevaDuration(7)">1 semana</button>
+                        <button type="button" class="dur-btn" onclick="setNuevaDuration(14)">2 semanas</button>
+                        <button type="button" class="dur-btn" onclick="setNuevaDuration(30)">1 mes</button>
+                        <button type="button" class="dur-btn" onclick="setNuevaDuration('custom')">Fecha exacta</button>
+                        <button type="button" class="dur-btn dur-indef" onclick="setNuevaDuration(null)">Sin límite</button>
+                    </div>
+                    <div id="nuevaCustomDate" style="display:none;">
+                        <input type="datetime-local" id="nueva_fecha_fin" style="background:#1a1a1a; border:1px solid rgba(255,255,255,0.15); border-radius:7px; padding:9px 12px; color:#fff; font-family:'Montserrat',sans-serif; font-size:12px; width:100%;">
+                    </div>
+                </div>
+            </div>
+
             <div class="form-actions">
                 <button type="submit" class="btn-primary">
                     ✓ Guardar Película
@@ -68,6 +114,36 @@ requireLogin();
     </div>
 
 <script>
+// ═══════════════════════════════════════════════════════════════════════════
+// NUEVA BADGE
+// ═══════════════════════════════════════════════════════════════════════════
+let nuevaDuracion = undefined; // undefined = no marcada, null = indefinida, número/fecha = fecha fin
+
+function toggleNuevaOptions() {
+    const checked = document.getElementById('marcar_nueva').checked;
+    document.getElementById('nuevaOptions').style.display = checked ? 'block' : 'none';
+    if (!checked) nuevaDuracion = undefined;
+}
+
+function setNuevaDuration(val) {
+    document.querySelectorAll('.dur-btn').forEach(b => b.classList.remove('active'));
+    event.target.classList.add('active');
+    document.getElementById('nuevaCustomDate').style.display = 'none';
+
+    if (val === null) {
+        nuevaDuracion = null; // indefinido
+    } else if (val === 'custom') {
+        nuevaDuracion = 'custom';
+        document.getElementById('nuevaCustomDate').style.display = 'block';
+        const now = new Date(); now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
+        document.getElementById('nueva_fecha_fin').min = now.toISOString().slice(0,16);
+    } else {
+        const d = new Date();
+        d.setDate(d.getDate() + parseInt(val));
+        nuevaDuracion = d.toISOString().slice(0,19).replace('T',' ');
+    }
+}
+
 // ═══════════════════════════════════════════════════════════════════════════
 // CARGAR CATEGORÍAS
 // ═══════════════════════════════════════════════════════════════════════════
@@ -145,8 +221,26 @@ document.getElementById('addMovieForm').addEventListener('submit', async (e) => 
         
         if (result.success) {
             showMessage('✓ Película agregada exitosamente', 'success');
+            
+            // Si está marcada como nueva, guardar el badge
+            const marcarNueva = document.getElementById('marcar_nueva').checked;
+            if (marcarNueva) {
+                let fechaFin = nuevaDuracion;
+                if (nuevaDuracion === 'custom') {
+                    fechaFin = document.getElementById('nueva_fecha_fin').value || null;
+                }
+                await fetch('api.php?action=set_new_badge', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ pelicula_id: result.id, fecha_fin: fechaFin })
+                });
+            }
+
             setTimeout(() => {
                 e.target.reset();
+                document.getElementById('nuevaOptions').style.display = 'none';
+                document.getElementById('marcar_nueva').checked = false;
+                nuevaDuracion = undefined;
                 limitCategories();
             }, 1500);
         } else {

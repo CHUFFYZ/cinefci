@@ -86,6 +86,7 @@ try {
     <!-- FILTROS DE CATEGORÍA -->
     <div class="filter-section">
         <button class="filter-btn active" onclick="filterByCategory('')">Todas</button>
+        <button class="filter-btn" onclick="filterNuevas()">Nuevo</button>
         <button class="filter-btn" onclick="sortMovies('az')">A-Z</button>
         <button class="filter-btn" onclick="sortMovies('popularidad')">Pop</button>
         <button id="expandFiltersBtn" class="expand-btn" onclick="toggleFilters()">
@@ -310,6 +311,7 @@ function renderMovies(movies) {
     grid.innerHTML = movies.map(m => {
         const isSuspended = m.suspendida && m.fecha_suspension;
         const isMasVotada = masVotadaGlobal && masVotadaGlobal.id === m.id && masVotadaGlobal.veces_ganadora > 0;
+        const isNueva = m.es_nueva === 1 || m.es_nueva === '1' || m.es_nueva === true;
         
         let timeRemaining = '';
         if (isSuspended) {
@@ -348,6 +350,7 @@ function renderMovies(movies) {
         return `
             <div class="movie-card ">
                 ${isMasVotada ? '<div class="ribbon-badge">🏆 Más Votada</div>' : ''}
+                ${isNueva ? '<div class="ribbon-new">Nuevo</div>' : ''}
                 <img src="${m.poster}" alt="${m.titulo}" class="movie-poster ${isSuspended ? 'suspended' : ''}" 
                      onerror="this.src='image/no-poster.png'" onclick="openModal(${m.id})">
                 <div class="movie-info">
@@ -373,6 +376,19 @@ function filterByCategory(categoria) {
     fetchMovies(categoria);
     const container = document.getElementById('categoryFilters');
     if (container.classList.contains('expanded')) toggleFilters();
+}
+
+async function filterNuevas() {
+    document.querySelectorAll('.filter-btn').forEach(btn => btn.classList.remove('active'));
+    event.target.classList.add('active');
+    try {
+        const res = await fetch(`api.php?action=list&browser_id=${encodeURIComponent(browserId)}&nuevas=1`);
+        currentMovies = await res.json();
+        await fetchMasVotada();
+        renderMovies(currentMovies);
+    } catch (err) {
+        console.error('Error al filtrar nuevas:', err);
+    }
 }
 // ═══════════════════════════════════════════════════════════════════════════
 // ORDENAR PELÍCULAS

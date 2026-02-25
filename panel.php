@@ -389,7 +389,7 @@ requireLogin();
                     <span class="firebase-status-dot"></span>
                     Firebase: sin configurar
                 </span>
-                <button class="config-toggle-btn" onclick="toggleFirebaseConfigPanel()">
+                <button class="firebase-status-badge config-toggle-btn" onclick="toggleFirebaseConfigPanel()">
                     ⚙ Configurar Firebase
                 </button>
             </div>
@@ -420,6 +420,17 @@ requireLogin();
                     </div>
                 </div>
                 <button class="fcb-save-btn" onclick="savePanelFirebaseConfig()">Guardar y conectar 🚀</button>
+            </div>
+        </div>
+
+        <!-- NUEVAS EN CARTELERA — solo visible en el panel -->
+        <div class="chat-control-section" id="nuevasSection" style="margin-bottom:30px; border-color: rgba(0,200,83,0.25);">
+            <div class="chat-control-header">
+                <div class="chat-control-title" style="color:#00e676;">Nuevas en Cartelera</div>
+                <button class="chat-clear-btn" style="border-color:rgba(0,200,83,0.4); color:#00c853;" onclick="loadNuevas()">🔄 Actualizar</button>
+            </div>
+            <div id="nuevasList" style="margin-top:4px;">
+                <div style="color:#8c8c8c; font-size:13px;">Cargando...</div>
             </div>
         </div>
 
@@ -769,11 +780,101 @@ function showPanelNotif(msg) {
 // ═══════════════════════════════════════════════════════════════════════════
 window.addEventListener('load', () => {
     loadStats();
+    loadNuevas();
     setInterval(loadStats, 8000);
     initFirebasePanel();
 });
 
 window.loadStats = loadStats;
+
+// ═══════════════════════════════════════════════════════════════════════════
+// ✨ NUEVAS EN CARTELERA — Contador regresivo
+// ═══════════════════════════════════════════════════════════════════════════
+let nuevasCountdownInterval = null;
+
+async function loadNuevas() {
+    try {
+        const res = await fetch('api.php?action=movies_with_new');
+        const movies = await res.json();
+        const activas = movies.filter(m => m.es_nueva === 1 || m.es_nueva === '1');
+        renderNuevas(activas);
+    } catch (e) {
+        document.getElementById('nuevasList').innerHTML = '<div style="color:#e50914;font-size:13px;">Error al cargar</div>';
+    }
+}
+
+function renderNuevas(activas) {
+    const container = document.getElementById('nuevasList');
+
+    if (activas.length === 0) {
+        container.innerHTML = '<div style="color:#8c8c8c; font-size:13px; font-style:italic;">No hay películas marcadas como nuevas en este momento.</div>';
+        return;
+    }
+
+    container.innerHTML = activas.map(m => {
+        const fin = m.fecha_fin_nueva;
+        const hasFin = fin !== null && fin !== '';
+        return `
+            <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:12px;
+                        background:rgba(0,200,83,0.07); border:1px solid rgba(0,200,83,0.2); border-radius:10px;
+                        padding:14px 18px; margin-bottom:10px;">
+                <div>
+                    <div style="font-weight:700; font-size:14px; color:#fff;">${m.titulo}</div>
+                    <div style="font-size:11px; color:#8c8c8c; margin-top:3px;">
+                        Desde: ${m.fecha_inicio ? new Date(m.fecha_inicio).toLocaleString('es-MX') : '—'}
+                    </div>
+                </div>
+                <div style="text-align:right;">
+                    ${hasFin
+                        ? `<div style="font-family:'Bebas Neue',cursive; font-size:1.4rem; color:#00e676; letter-spacing:0.05em;"
+                              id="cd-${m.id}" data-fin="${fin}">calculando...</div>
+                           <div style="font-size:10px; color:#8c8c8c; margin-top:1px;">tiempo restante</div>`
+                        : `<div style="font-size:12px; color:#7986cb; font-weight:700;">🔒 Sin límite</div>`
+                    }
+                    <button onclick="quitarNuevaPanelBadge(${m.id})" style="
+                        margin-top:8px; background:rgba(229,9,20,0.1); border:1px solid rgba(229,9,20,0.35);
+                        color:#e50914; padding:5px 12px; border-radius:6px; font-size:11px; font-weight:700;
+                        cursor:pointer; font-family:'Montserrat',sans-serif;">✕ Quitar sello</button>
+                </div>
+            </div>
+        `;
+    }).join('');
+
+    // Arrancar contador regresivo
+    if (nuevasCountdownInterval) clearInterval(nuevasCountdownInterval);
+    nuevasCountdownInterval = setInterval(() => {
+        document.querySelectorAll('[data-fin]').forEach(el => {
+            const fin = new Date(el.dataset.fin);
+            const diff = fin - new Date();
+            if (diff <= 0) {
+                el.textContent = '¡Expirado!';
+                el.style.color = '#e50914';
+            } else {
+                const d = Math.floor(diff / 86400000);
+                const h = Math.floor((diff % 86400000) / 3600000);
+                const m = Math.floor((diff % 3600000) / 60000);
+                const s = Math.floor((diff % 60000) / 1000);
+                el.textContent = d > 0 ? `${d}d ${h}h ${m}m` : `${h}h ${m}m ${s}s`;
+            }
+        });
+    }, 1000);
+}
+
+window.quitarNuevaPanelBadge = async function(movieId) {
+    if (!confirm('¿Quitar el sello "Nuevo" de esta película?')) return;
+    try {
+        const res = await fetch('api.php?action=remove_new_badge', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ pelicula_id: movieId })
+        });
+        const data = await res.json();
+        if (data.success) {
+            showPanelNotif('✕ Sello "Nuevo" quitado');
+            loadNuevas();
+        }
+    } catch (e) { alert('Error al quitar el sello'); }
+};
 </script>
 </body>
 </html>
