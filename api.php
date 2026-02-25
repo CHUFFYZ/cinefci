@@ -151,7 +151,7 @@ if ($method === 'GET') {
     // LISTAR PELÍCULAS SIMPLES (para selectores)
     // ═══════════════════════════════════════════════════════════════════════════
     if ($action === 'movies_list') {
-        $stmt = $db->query("SELECT id, titulo FROM peliculas ORDER BY titulo");
+        $stmt = $db->query("SELECT id, titulo, poster FROM peliculas ORDER BY titulo");
         $peliculas = $stmt->fetchAll(PDO::FETCH_ASSOC);
         echo json_encode($peliculas);
         exit;
