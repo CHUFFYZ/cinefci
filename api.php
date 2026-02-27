@@ -17,6 +17,8 @@ try {
 // Asegurar tablas auxiliares
 try { $db->exec("CREATE TABLE IF NOT EXISTS peliculas_ocultas (id INTEGER PRIMARY KEY AUTOINCREMENT, pelicula_id INTEGER NOT NULL UNIQUE, fecha_inicio DATETIME DEFAULT CURRENT_TIMESTAMP, fecha_fin DATETIME NULL)"); } catch (Exception $e) {}
 try { $db->exec("CREATE TABLE IF NOT EXISTS peliculas_nuevas (id INTEGER PRIMARY KEY AUTOINCREMENT, pelicula_id INTEGER NOT NULL UNIQUE, fecha_inicio DATETIME DEFAULT CURRENT_TIMESTAMP, fecha_fin DATETIME NULL)"); } catch (Exception $e) {}
+try { $db->exec("CREATE TABLE IF NOT EXISTS cartelera_config (clave TEXT PRIMARY KEY, valor TEXT NOT NULL)"); } catch (Exception $e) {}
+try { $db->exec("CREATE TABLE IF NOT EXISTS peliculas_destacadas (posicion INTEGER PRIMARY KEY, pelicula_id INTEGER NOT NULL)"); } catch (Exception $e) {}
 
 $method = $_SERVER['REQUEST_METHOD'];
 $action = $_GET['action'] ?? '';
@@ -168,7 +170,12 @@ if ($method === 'GET') {
             die(json_encode(['error' => 'ID inválido']));
         }
 
-        $stmt = $db->prepare("SELECT * FROM peliculas WHERE id = ?");
+        $stmt = $db->prepare("
+            SELECT p.*,
+                (SELECT COUNT(*) FROM calificaciones WHERE pelicula_id = p.id) AS total_calificaciones,
+                (SELECT ROUND(AVG(calificacion),1) FROM calificaciones WHERE pelicula_id = p.id) AS promedio
+            FROM peliculas p WHERE p.id = ?
+        ");
         $stmt->execute([$id]);
         $pelicula = $stmt->fetch(PDO::FETCH_ASSOC);
 
@@ -270,6 +277,38 @@ if ($method === 'GET') {
         exit;
     }
 
+    // ═══════════════════════════════════════════════════════════════════════════
+    // OBTENER CONFIG DE CARTELERA
+    // ═══════════════════════════════════════════════════════════════════════════
+    if ($action === 'get_cartelera_config') {
+        try {
+            $stmt = $db->query("SELECT clave, valor FROM cartelera_config");
+            $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+            $config = [];
+            foreach ($rows as $r) $config[$r['clave']] = $r['valor'];
+
+            $stmt2 = $db->query("
+                SELECT pd.posicion, pd.pelicula_id, p.titulo, p.poster
+                FROM peliculas_destacadas pd
+                INNER JOIN peliculas p ON p.id = pd.pelicula_id
+                ORDER BY pd.posicion ASC
+            ");
+            $dest = $stmt2->fetchAll(PDO::FETCH_ASSOC);
+            foreach ($dest as &$d) $d['pelicula_id'] = (int)$d['pelicula_id'];
+            $config['destacadas'] = $dest;
+
+            if (!isset($config['filtro_inicial']))    $config['filtro_inicial']    = 'todas';
+            if (!isset($config['orden']))             $config['orden']             = 'defecto';
+            if (!isset($config['categoria_inicial'])) $config['categoria_inicial'] = '';
+
+            echo json_encode($config);
+        } catch (Exception $e) {
+            http_response_code(500);
+            echo json_encode(['error' => $e->getMessage()]);
+        }
+        exit;
+    }
+
 } elseif ($method === 'POST') {
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -339,6 +378,38 @@ if ($method === 'GET') {
             $db->prepare("DELETE FROM peliculas_nuevas WHERE pelicula_id = ?")->execute([$pelicula_id]);
             echo json_encode(['success' => true, 'message' => 'Sello de novedad quitado']);
         } catch (Exception $e) { http_response_code(500); echo json_encode(['success' => false, 'message' => $e->getMessage()]); }
+        exit;
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // GUARDAR CONFIG DE CARTELERA
+    // ═══════════════════════════════════════════════════════════════════════════
+    if ($action === 'save_cartelera_config') {
+        $data = json_decode(file_get_contents('php://input'), true) ?: [];
+        try {
+            foreach (['filtro_inicial', 'orden', 'categoria_inicial'] as $key) {
+                if (!isset($data[$key])) continue;
+                $chk = $db->prepare("SELECT clave FROM cartelera_config WHERE clave = ?");
+                $chk->execute([$key]);
+                if ($chk->fetch()) {
+                    $db->prepare("UPDATE cartelera_config SET valor = ? WHERE clave = ?")->execute([$data[$key], $key]);
+                } else {
+                    $db->prepare("INSERT INTO cartelera_config (clave, valor) VALUES (?, ?)")->execute([$key, $data[$key]]);
+                }
+            }
+            if (isset($data['destacadas']) && is_array($data['destacadas'])) {
+                $db->exec("DELETE FROM peliculas_destacadas");
+                $stmt = $db->prepare("INSERT INTO peliculas_destacadas (posicion, pelicula_id) VALUES (?, ?)");
+                foreach ($data['destacadas'] as $i => $pid) {
+                    $pid = (int)$pid;
+                    if ($pid > 0) $stmt->execute([$i + 1, $pid]);
+                }
+            }
+            echo json_encode(['success' => true, 'message' => 'Configuración guardada']);
+        } catch (Exception $e) {
+            http_response_code(500);
+            echo json_encode(['success' => false, 'message' => $e->getMessage()]);
+        }
         exit;
     }
 

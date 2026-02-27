@@ -53,7 +53,10 @@ try {
     </script>
 </head>
 <style>
-    
+@keyframes shimmer {
+    0%   { background-position: 200% 0; }
+    100% { background-position: -200% 0; }
+}
 </style>
 <body>
     <div class="Luffy">
@@ -85,10 +88,12 @@ try {
     
     <!-- FILTROS DE CATEGORÍA -->
     <div class="filter-section">
-        <button class="filter-btn active" onclick="filterByCategory('')">Todas</button>
-        <button class="filter-btn" onclick="filterNuevas()">Nuevo</button>
-        <button class="filter-btn" onclick="sortMovies('az')">A-Z</button>
-        <button class="filter-btn" onclick="sortMovies('popularidad')">Pop</button>
+        <!-- Grupo 1: Filtro de contenido (solo uno activo) -->
+        <button class="filter-btn filter-content active" data-content="todas" onclick="filterByCategory('')">Todas</button>
+        <button class="filter-btn filter-content" data-content="nuevas" onclick="filterNuevas()">Nuevo</button>
+        <!-- Grupo 2: Subfiltro de orden (independiente, toggle) -->
+        <button class="filter-btn filter-order" data-order="az" onclick="toggleOrder('az')">A-Z</button>
+        <button class="filter-btn filter-order" data-order="popularidad" onclick="toggleOrder('popularidad')">Pop</button>
         <button id="expandFiltersBtn" class="expand-btn" onclick="toggleFilters()">
             <img src="image/iconos/flecha-abajo.png" alt="Más filtros" class="expand-icon">
         </button>
@@ -212,8 +217,11 @@ if (!browserId) {
 
 let currentMovies = [];
 let allCategories = [];
-let currentFilter = '';
+let currentFilter    = '';        // '' = todas, '__nuevas__', o nombre de categoría
+let currentOrder     = 'defecto'; // subfiltro de orden activo por el usuario
+let userHasSetOrder  = false;     // true solo cuando el usuario toca A-Z o Pop manualmente
 let masVotadaGlobal = null;
+let carteleraConfig = { filtro_inicial: 'todas', orden: 'defecto', categoria_inicial: '', destacadas: [] };
 
 // ═══════════════════════════════════════════════════════════════════════════
 // CARGAR CATEGORÍAS
@@ -262,25 +270,30 @@ function toggleFilters() {
 function renderCategoryFilters() {
     const container = document.getElementById('categoryFilters');
     if (!container) return;
-    
     container.innerHTML = allCategories.map(cat => `
-        <button class="filter-btn" onclick="filterByCategory('${cat.nombre}')">${cat.nombre}</button>
+        <button class="filter-btn filter-content" data-cat="${cat.nombre}" onclick="filterByCategory('${cat.nombre}')">${cat.nombre}</button>
     `).join('');
     checkFilterLimit();
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-// CARGAR PELÍCULAS DESDE EL SERVIDOR
+// CARGAR PELÍCULAS DESDE EL SERVIDOR — paralelo para mayor velocidad
 // ═══════════════════════════════════════════════════════════════════════════
-async function fetchMovies(categoria = '') {
+async function fetchMovies(categoria = '', ordenOverride = null) {
     try {
         let url = `api.php?action=list&browser_id=${encodeURIComponent(browserId)}`;
         if (categoria) url += `&categoria=${encodeURIComponent(categoria)}`;
-        
-        const res = await fetch(url);
-        currentMovies = await res.json();
-        await fetchMasVotada();
-        renderMovies(currentMovies);
+
+        const [moviesRes, statsRes] = await Promise.all([
+            fetch(url),
+            fetch('api.php?action=stats')
+        ]);
+        currentMovies = await moviesRes.json();
+        masVotadaGlobal = (await statsRes.json()).mas_votada;
+
+        // En carga inicial usa el orden de config; en filtros manuales usa currentOrder
+        const orden = ordenOverride ?? currentOrder;
+        applyOrderAndRender(orden);
     } catch (err) {
         console.error('Error al cargar películas:', err);
         document.getElementById('moviesGrid').innerHTML = '<div class="error">Error al cargar películas</div>';
@@ -295,6 +308,49 @@ async function fetchMasVotada() {
     } catch (err) {
         console.error('Error al obtener más votada:', err);
     }
+}
+
+// Aplica orden y renderiza.
+// Destacadas aplican cuando: filtro = 'todas' Y el usuario NO ha activado manualmente un subfiltro
+function applyOrderAndRender(orden) {
+    let movies = [...currentMovies];
+    const enTodas          = (currentFilter === '');
+    const aplicarDestacadas = enTodas && !userHasSetOrder;
+
+    if (aplicarDestacadas) {
+        const destIds = (carteleraConfig.destacadas || []).map(d => parseInt(d.pelicula_id || d));
+        if (destIds.length > 0) {
+            const destMovies = destIds.map(id => movies.find(m => parseInt(m.id) === id)).filter(Boolean);
+            const restMovies = movies.filter(m => !destIds.includes(parseInt(m.id)));
+            movies = [...destMovies, ...restMovies];
+        }
+        // Con destacadas: el orden de config se aplica solo al bloque "resto"
+        if (orden !== 'defecto') {
+            const destCount = (carteleraConfig.destacadas || []).filter(d =>
+                movies.some(m => parseInt(m.id) === parseInt(d.pelicula_id || d))
+            ).length;
+            const dest = movies.slice(0, destCount);
+            const rest = movies.slice(destCount);
+            switch (orden) {
+                case 'az':          rest.sort((a,b) => a.titulo.localeCompare(b.titulo)); break;
+                case 'za':          rest.sort((a,b) => b.titulo.localeCompare(a.titulo)); break;
+                case 'popularidad': rest.sort((a,b) => (parseInt(b.votos)||0) - (parseInt(a.votos)||0)); break;
+                case 'nuevas':      rest.sort((a,b) => (b.es_nueva||0) - (a.es_nueva||0)); break;
+            }
+            movies = [...dest, ...rest];
+        }
+    } else {
+        // Sin destacadas (usuario aplicó orden manual o está en filtro de contenido):
+        switch (orden) {
+            case 'az':          movies.sort((a,b) => a.titulo.localeCompare(b.titulo)); break;
+            case 'za':          movies.sort((a,b) => b.titulo.localeCompare(a.titulo)); break;
+            case 'popularidad': movies.sort((a,b) => (parseInt(b.votos)||0) - (parseInt(a.votos)||0)); break;
+            case 'nuevas':      movies.sort((a,b) => (b.es_nueva||0) - (a.es_nueva||0)); break;
+            default: break;
+        }
+    }
+
+    renderMovies(movies);
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -352,7 +408,7 @@ function renderMovies(movies) {
                 ${isMasVotada ? '<div class="ribbon-badge">🏆 Más Votada</div>' : ''}
                 ${isNueva ? '<div class="ribbon-new">Nuevo</div>' : ''}
                 <img src="${m.poster}" alt="${m.titulo}" class="movie-poster ${isSuspended ? 'suspended' : ''}" 
-                     onerror="this.src='image/no-poster.png'" onclick="openModal(${m.id})">
+                     loading="lazy" onerror="this.src='image/no-poster.png'" onclick="openModal(${m.id})">
                 <div class="movie-info">
                     <div class="movie-title">${m.titulo}</div>
                     <button class="vote-btn ${m.ya_voto ? 'voted' : ''} ${isSuspended ? 'disabled' : ''}" 
@@ -367,50 +423,95 @@ function renderMovies(movies) {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-// FILTRAR
+// FEEDBACK VISUAL — skeleton mientras carga
+// ═══════════════════════════════════════════════════════════════════════════
+function showGridLoading() {
+    const grid = document.getElementById('moviesGrid');
+    grid.innerHTML = Array(8).fill(`
+        <div class="movie-card" style="pointer-events:none;">
+            <div style="width:100%;aspect-ratio:2/3;background:linear-gradient(90deg,#1a1a1a 25%,#2a2a2a 50%,#1a1a1a 75%);background-size:200% 100%;animation:shimmer 1.2s infinite;border-radius:8px 8px 0 0;"></div>
+            <div class="movie-info" style="padding:10px;">
+                <div style="height:14px;background:#2a2a2a;border-radius:4px;margin-bottom:8px;animation:shimmer 1.2s infinite;background-size:200% 100%;background-image:linear-gradient(90deg,#1a1a1a 25%,#2a2a2a 50%,#1a1a1a 75%);"></div>
+                <div style="height:32px;background:#2a2a2a;border-radius:6px;animation:shimmer 1.2s infinite;background-size:200% 100%;background-image:linear-gradient(90deg,#1a1a1a 25%,#2a2a2a 50%,#1a1a1a 75%);"></div>
+            </div>
+        </div>
+    `).join('');
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// HELPERS UI — marcar botones activos por grupo independiente
+// ═══════════════════════════════════════════════════════════════════════════
+function setContentActive(value) {
+    // Grupo contenido: solo uno activo
+    document.querySelectorAll('.filter-content').forEach(btn =>
+        btn.classList.toggle('active', btn.dataset.content === value)
+    );
+    document.querySelectorAll('#categoryFilters .filter-btn').forEach(btn =>
+        btn.classList.toggle('active', btn.dataset.cat === value)
+    );
+}
+
+function setOrderActive(value) {
+    // Grupo orden: toggle, uno o ninguno activo
+    document.querySelectorAll('.filter-order').forEach(btn =>
+        btn.classList.toggle('active', btn.dataset.order === value)
+    );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// FILTROS DE CONTENIDO (Todas / Nuevas / Categoría)
 // ═══════════════════════════════════════════════════════════════════════════
 function filterByCategory(categoria) {
     currentFilter = categoria;
-    document.querySelectorAll('.filter-btn').forEach(btn => btn.classList.remove('active'));
-    event.target.classList.add('active');
+    // Al cambiar de contenido, el orden manual se resetea
+    userHasSetOrder = false;
+    currentOrder = 'defecto';
+    setOrderActive('__none__');
+    setContentActive(categoria === '' ? 'todas' : categoria);
+    showGridLoading();
     fetchMovies(categoria);
     const container = document.getElementById('categoryFilters');
     if (container.classList.contains('expanded')) toggleFilters();
 }
 
 async function filterNuevas() {
-    document.querySelectorAll('.filter-btn').forEach(btn => btn.classList.remove('active'));
-    event.target.classList.add('active');
+    currentFilter = '__nuevas__';
+    userHasSetOrder = false;
+    currentOrder = 'defecto';
+    setOrderActive('__none__');
+    setContentActive('nuevas');
+    showGridLoading();
     try {
-        const res = await fetch(`api.php?action=list&browser_id=${encodeURIComponent(browserId)}&nuevas=1`);
-        currentMovies = await res.json();
-        await fetchMasVotada();
-        renderMovies(currentMovies);
+        const [moviesRes, statsRes] = await Promise.all([
+            fetch(`api.php?action=list&browser_id=${encodeURIComponent(browserId)}&nuevas=1`),
+            fetch('api.php?action=stats')
+        ]);
+        currentMovies = await moviesRes.json();
+        masVotadaGlobal = (await statsRes.json()).mas_votada;
+        applyOrderAndRender(currentOrder);
     } catch (err) {
         console.error('Error al filtrar nuevas:', err);
     }
 }
-// ═══════════════════════════════════════════════════════════════════════════
-// ORDENAR PELÍCULAS
-// ═══════════════════════════════════════════════════════════════════════════
-function sortMovies(criterio) {
-    // Marcamos el botón como activo visualmente
-    document.querySelectorAll('.filter-btn').forEach(btn => btn.classList.remove('active'));
-    event.target.classList.add('active');
 
-    if (criterio === 'az') {
-        // Ordenar de la A a la Z por el título
-        currentMovies.sort((a, b) => a.titulo.localeCompare(b.titulo));
-    } 
-    else if (criterio === 'popularidad') {
-        // Ordenar de mayor a menor número de votos
-        // Asegúrate de que 'votos' sea tratado como número
-        currentMovies.sort((a, b) => Number(b.votos) - Number(a.votos));
+// ═══════════════════════════════════════════════════════════════════════════
+// SUBFILTRO DE ORDEN — toggle independiente del filtro de contenido
+// ═══════════════════════════════════════════════════════════════════════════
+function toggleOrder(criterio) {
+    if (currentOrder === criterio) {
+        // Ya activo → desactivar
+        currentOrder = 'defecto';
+        userHasSetOrder = false;
+        setOrderActive('__none__');
+    } else {
+        currentOrder = criterio;
+        userHasSetOrder = true;   // el usuario eligió manualmente un orden
+        setOrderActive(criterio);
     }
-
-    // Volvemos a pintar las películas ya ordenadas
-    renderMovies(currentMovies);
+    applyOrderAndRender(currentOrder);
 }
+
+function sortMovies(criterio) { toggleOrder(criterio); }
 // ═══════════════════════════════════════════════════════════════════════════
 // VOTAR
 // ═══════════════════════════════════════════════════════════════════════════
@@ -418,6 +519,7 @@ async function voteForMovie(id, e) {
     e.stopPropagation();
     const btn = e.target;
     btn.disabled = true;
+    btn.textContent = 'Guardando...';
 
     try {
         const res = await fetch('api.php?action=vote', {
@@ -425,11 +527,24 @@ async function voteForMovie(id, e) {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ pelicula_id: id, browser_id: browserId })
         });
-
         const data = await res.json();
 
         if (data.success) {
-            await fetchMovies(currentFilter);
+            // Actualizar votos en memoria: quitar voto anterior, agregar nuevo
+            currentMovies.forEach(m => {
+                if (m.ya_voto && parseInt(m.id) !== parseInt(id)) {
+                    m.ya_voto = false;
+                    m.votos = Math.max(0, parseInt(m.votos || 0) - 1);
+                }
+            });
+            const movie = currentMovies.find(m => parseInt(m.id) === parseInt(id));
+            if (movie) {
+                const yaVotaba = movie.ya_voto;
+                movie.ya_voto = true;
+                if (!yaVotaba) movie.votos = parseInt(movie.votos || 0) + 1;
+            }
+            // Re-renderizar preservando orden actual
+            applyOrderAndRender(carteleraConfig.orden || 'defecto');
         } else {
             alert(data.message || data.error);
             btn.disabled = false;
@@ -445,17 +560,21 @@ async function voteForMovie(id, e) {
 // CALIFICAR CON ESTRELLAS
 // ═══════════════════════════════════════════════════════════════════════════
 async function rateMovie(id, rating) {
+    // Feedback inmediato en las estrellas — sin esperar al servidor
+    const stars = document.querySelectorAll('#starsContainer .star');
+    stars.forEach((s, i) => s.classList.toggle('active', i < rating));
+
     try {
         const res = await fetch('api.php?action=rate', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ pelicula_id: id, rating, browser_id: browserId })
         });
-
         const data = await res.json();
 
         if (res.ok && data.success) {
-            await refreshMovieInModal(id);
+            // Solo actualiza los datos de ESA película — no recarga todo
+            refreshMovieRating(id, rating);
             showNotification('¡Gracias por tu calificación!');
         } else {
             alert(data.message || 'No se pudo guardar la calificación');
@@ -466,15 +585,38 @@ async function rateMovie(id, rating) {
     }
 }
 
+// Actualiza promedio/estrellas de una película SIN recargar la lista ni alterar el orden
+async function refreshMovieRating(movieId, userRating) {
+    try {
+        const res = await fetch(`api.php?action=get_movie&id=${movieId}`);
+        const updated = await res.json();
+        if (!updated || updated.error) return;
+
+        // Actualizar en memoria
+        const idx = currentMovies.findIndex(m => parseInt(m.id) === parseInt(movieId));
+        if (idx !== -1) {
+            currentMovies[idx].promedio            = updated.promedio;
+            currentMovies[idx].total_calificaciones = updated.total_calificaciones;
+            currentMovies[idx].user_rating          = userRating;
+        }
+
+        // Actualizar solo el modal — sin tocar la grilla
+        updateAverageRating({ ...updated, user_rating: userRating });
+        renderStars({ ...updated, user_rating: userRating });
+
+    } catch (e) {
+        console.error('No se pudo refrescar calificación', e);
+    }
+}
+
 // ═══════════════════════════════════════════════════════════════════════════
 // MODAL
 // ═══════════════════════════════════════════════════════════════════════════
 
-
 function renderStars(movie) {
     const container = document.getElementById('starsContainer');
     container.innerHTML = '';
-    const userRating = movie.user_rating || 0;
+    const userRating = parseInt(movie.user_rating) || 0;
     for (let i = 1; i <= 5; i++) {
         const star = document.createElement('span');
         star.className = 'star';
@@ -496,23 +638,6 @@ function updateAverageRating(movie) {
         Calificación promedio: <strong>${parseFloat(movie.promedio).toFixed(1)}</strong> ★ 
         (${total} ${total === 1 ? 'calificación' : 'calificaciones'})
     `;
-}
-
-async function refreshMovieInModal(movieId) {
-    try {
-        const res = await fetch(`api.php?action=list&browser_id=${encodeURIComponent(browserId)}`);
-        const all = await res.json();
-        const updatedMovie = all.find(m => m.id == movieId);
-        if (updatedMovie) {
-            const idx = currentMovies.findIndex(m => m.id == movieId);
-            if (idx !== -1) currentMovies[idx] = updatedMovie;
-            updateAverageRating(updatedMovie);
-            renderStars(updatedMovie);
-            renderMovies(currentMovies);
-        }
-    } catch (e) {
-        console.error('No se pudo refrescar película');
-    }
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -541,11 +666,43 @@ document.getElementById('movieModal').addEventListener('click', function(e) {
 });
 
 window.addEventListener('load', async () => {
-    await fetchCategories();
-    await fetchMovies();
+    const [configRes] = await Promise.all([
+        fetch('api.php?action=get_cartelera_config').then(r => r.json()).catch(() => ({})),
+        fetchCategories()
+    ]);
+    if (configRes) carteleraConfig = { ...carteleraConfig, ...configRes };
+
+    const filtroInicial = carteleraConfig.filtro_inicial || 'todas';
+    const ordenInicial  = carteleraConfig.orden || 'defecto';
+    const catInicial    = carteleraConfig.categoria_inicial || '';
+
+    // El orden de config se aplica en carga inicial sin marcar botón ni contar como orden manual
+    currentOrder    = 'defecto';
+    userHasSetOrder = false;
+
+    if (filtroInicial === 'nuevas') {
+        currentFilter = '__nuevas__';
+        setContentActive('nuevas');
+        const [moviesRes, statsRes] = await Promise.all([
+            fetch(`api.php?action=list&browser_id=${encodeURIComponent(browserId)}&nuevas=1`),
+            fetch('api.php?action=stats')
+        ]);
+        currentMovies = await moviesRes.json();
+        masVotadaGlobal = (await statsRes.json()).mas_votada;
+        applyOrderAndRender(ordenInicial);
+    } else if (filtroInicial === 'categoria' && catInicial) {
+        currentFilter = catInicial;
+        setContentActive(catInicial);
+        await fetchMovies(catInicial, ordenInicial);
+    } else {
+        currentFilter = '';
+        setContentActive('todas');
+        await fetchMovies('', ordenInicial);
+    }
+
     setTimeout(() => {
         document.getElementById('loadingScreen')?.classList.add('hidden');
-    }, 1800);
+    }, 1000);
 });
 </script>
 <script src="js/textos-coneccion.js"></script>
