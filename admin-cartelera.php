@@ -23,6 +23,7 @@ requireLogin();
             animation: fadeInUp 0.5s ease-out;
         }
         .cc-section.green-border { border-color: rgba(0,200,83,0.3); }
+        .cc-section.orange-border { border-color: rgba(255,140,0,0.35); }
 
         @keyframes fadeInUp {
             from { opacity:0; transform:translateY(20px); }
@@ -163,6 +164,17 @@ requireLogin();
         .nuevas-card-sub { font-size:11px; color:#8c8c8c; margin-top:3px; }
         .nuevas-cd { font-family:'Bebas Neue',cursive; font-size:1.4rem; color:#00e676; letter-spacing:0.05em; }
         .nuevas-cd-label { font-size:10px; color:#8c8c8c; margin-top:1px; }
+
+        /* Próximamente cards */
+        .prox-card {
+            display:flex; align-items:center; justify-content:space-between;
+            flex-wrap:wrap; gap:12px;
+            background:rgba(255,140,0,0.07);
+            border:1px solid rgba(255,140,0,0.25);
+            border-radius:10px; padding:14px 18px; margin-bottom:10px;
+        }
+        .prox-cd { font-family:'Bebas Neue',cursive; font-size:1.4rem; color:#ff8c00; letter-spacing:0.05em; }
+
         .btn-quitar {
             margin-top:4px; background:rgba(229,9,20,0.1);
             border:1px solid rgba(229,9,20,0.35); color:#e50914;
@@ -179,6 +191,14 @@ requireLogin();
             cursor:pointer; transition:all 0.2s;
         }
         .btn-refresh:hover { background:rgba(0,200,83,0.1); }
+        .btn-refresh-orange {
+            background:transparent;
+            border:1px solid rgba(255,140,0,0.4); color:#ff8c00;
+            padding:9px 18px; border-radius:8px;
+            font-family:'Montserrat',sans-serif; font-size:12px; font-weight:700;
+            cursor:pointer; transition:all 0.2s;
+        }
+        .btn-refresh-orange:hover { background:rgba(255,140,0,0.1); }
 
         /* Notif toast */
         #cc-notif {
@@ -275,6 +295,22 @@ requireLogin();
             <div style="color:#8c8c8c; font-size:13px;">Cargando...</div>
         </div>
     </div>
+
+    <!-- ══════════════════════════════════════════════════════
+         SECCIÓN 3 — PRÓXIMAMENTE EN CARTELERA
+    ══════════════════════════════════════════════════════ -->
+    <div class="cc-section orange-border">
+        <div class="cc-title" style="color:#ff8c00;">
+            <span style="padding-left:22px;">🎬 Próximamente en Cartelera</span>
+            <button class="btn-refresh-orange" onclick="loadProximamente()">🔄 Actualizar</button>
+        </div>
+        <p style="font-size:12px; color:#666; margin-bottom:16px; line-height:1.6;">
+            Películas marcadas como "Próximamente". No aparecen en la cartelera general ni pueden recibir votos. Se muestran en el filtro "Próximamente" con un listón naranja.
+        </p>
+        <div id="proxList">
+            <div style="color:#8c8c8c; font-size:13px;">Cargando...</div>
+        </div>
+    </div>
 </div>
 
 <!-- Toast notificación -->
@@ -288,6 +324,7 @@ let config    = { filtro_inicial:'todas', orden:'defecto', categoria_inicial:'',
 let allMovies = [];
 let allCats   = [];
 let cdInterval = null;
+let cdIntervalProx = null;
 
 // ══════════════════════════════════════════════════════════════════
 // INIT
@@ -324,6 +361,7 @@ window.addEventListener('load', async () => {
 
     renderDest();
     loadNuevas();
+    loadProximamente();
 });
 
 // ══════════════════════════════════════════════════════════════════
@@ -496,6 +534,74 @@ window.quitarNueva = async function(movieId) {
         });
         const data = await res.json();
         if (data.success) { notif('✕ Sello "Nuevo" quitado'); loadNuevas(); }
+    } catch(e) { notif('❌ Error al quitar el sello'); }
+};
+
+// ══════════════════════════════════════════════════════════════════
+// PRÓXIMAMENTE EN CARTELERA
+// ══════════════════════════════════════════════════════════════════
+async function loadProximamente() {
+    try {
+        const res    = await fetch('api.php?action=movies_with_proximamente');
+        const movies = await res.json();
+        const activas = movies.filter(m => m.es_proximamente === 1 || m.es_proximamente === '1');
+        renderProximamente(activas);
+    } catch(e) {
+        document.getElementById('proxList').innerHTML = '<div style="color:#e50914;font-size:13px;">Error al cargar</div>';
+    }
+}
+
+function renderProximamente(activas) {
+    const container = document.getElementById('proxList');
+    if (activas.length === 0) {
+        container.innerHTML = '<div style="color:#8c8c8c;font-size:13px;font-style:italic;">No hay películas marcadas como próximamente en este momento.</div>';
+        return;
+    }
+
+    container.innerHTML = activas.map(m => {
+        const fin    = m.fecha_fin_proximamente;
+        const hasFin = fin !== null && fin !== '';
+        return `
+        <div class="prox-card">
+            <div>
+                <div class="nuevas-card-title">${m.titulo}</div>
+                <div class="nuevas-card-sub">Desde: ${m.fecha_inicio ? new Date(m.fecha_inicio).toLocaleString('es-MX') : '—'}</div>
+            </div>
+            <div style="text-align:right;">
+                ${hasFin
+                    ? `<div class="prox-cd" id="prox-cd-${m.id}" data-fin="${fin}">calculando...</div>
+                       <div class="nuevas-cd-label">tiempo restante</div>`
+                    : `<div style="font-size:12px;color:#ff8c00;font-weight:700;">🔒 Sin límite</div>`
+                }
+                <button class="btn-quitar" onclick="quitarProx(${m.id})">✕ Quitar sello</button>
+            </div>
+        </div>`;
+    }).join('');
+
+    if (cdIntervalProx) clearInterval(cdIntervalProx);
+    cdIntervalProx = setInterval(() => {
+        document.querySelectorAll('[id^="prox-cd-"][data-fin]').forEach(el => {
+            const diff = new Date(el.dataset.fin) - new Date();
+            if (diff <= 0) {
+                el.textContent = '¡Expirado!'; el.style.color='#e50914';
+            } else {
+                const d=Math.floor(diff/86400000), h=Math.floor((diff%86400000)/3600000),
+                      m=Math.floor((diff%3600000)/60000), s=Math.floor((diff%60000)/1000);
+                el.textContent = d>0 ? `${d}d ${h}h ${m}m` : `${h}h ${m}m ${s}s`;
+            }
+        });
+    }, 1000);
+}
+
+window.quitarProx = async function(movieId) {
+    if (!confirm('¿Quitar el sello "Próximamente" de esta película?')) return;
+    try {
+        const res  = await fetch('api.php?action=remove_proximamente', {
+            method:'POST', headers:{'Content-Type':'application/json'},
+            body: JSON.stringify({ pelicula_id: movieId })
+        });
+        const data = await res.json();
+        if (data.success) { notif('✕ Sello "Próximamente" quitado'); loadProximamente(); }
     } catch(e) { notif('❌ Error al quitar el sello'); }
 };
 

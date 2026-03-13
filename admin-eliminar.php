@@ -24,6 +24,18 @@ requireLogin();
             <p>Esta acción NO se puede deshacer. Se eliminarán todos los votos, calificaciones y datos relacionados con la película.</p>
         </div>
 
+        <!-- BUSCADOR + FILTROS -->
+        <div class="admin-search-bar">
+            <span class="admin-search-icon">🔍</span>
+            <input type="text" class="admin-search-input" id="searchInput" placeholder="Buscar película por nombre..." oninput="applyFilters()">
+            <button class="admin-search-clear" id="searchClear" onclick="clearSearch()">✕</button>
+        </div>
+        <div class="admin-cat-filters" id="catFilters">
+            <span class="admin-cat-label">Categoría:</span>
+            <button class="admin-cat-btn active" data-cat="" onclick="setCat(this,'')">Todas</button>
+        </div>
+        <p style="font-size:11px;color:#555;margin-bottom:12px;" id="filterCount"></p>
+
         <!-- LISTA DE PELÍCULAS -->
         <div class="movies-grid-delete" id="moviesGrid">
             <!-- Se llenará dinámicamente -->
@@ -63,33 +75,72 @@ requireLogin();
 <script>
 let allMovies = [];
 let movieToDelete = null;
+let currentCat = '';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // CARGAR PELÍCULAS
 // ═══════════════════════════════════════════════════════════════════════════
 async function loadMovies() {
     try {
-        const res = await fetch('api.php?action=movies_list');
-        allMovies = await res.json();
-        renderMoviesGrid();
+        const [movRes, catRes] = await Promise.all([
+            fetch('api.php?action=movies_list'),
+            fetch('api.php?action=categorias')
+        ]);
+        allMovies = await movRes.json();
+        const cats = await catRes.json();
+        buildCatFilters(cats);
+        applyFilters();
     } catch (err) {
         console.error('Error al cargar películas:', err);
         showMessage('Error al cargar películas', 'error');
     }
 }
 
+function buildCatFilters(cats) {
+    const container = document.getElementById('catFilters');
+    const extra = cats.map(c => `<button class="admin-cat-btn" data-cat="${c.nombre}" onclick="setCat(this,'${c.nombre.replace(/'/g,"\'")}')">${c.nombre}</button>`).join('');
+    container.innerHTML = `<span class="admin-cat-label">Categoría:</span><button class="admin-cat-btn active" data-cat="" onclick="setCat(this,'')">Todas</button>${extra}`;
+}
+
+function setCat(btn, cat) {
+    currentCat = cat;
+    document.querySelectorAll('#catFilters .admin-cat-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    applyFilters();
+}
+
+function clearSearch() {
+    document.getElementById('searchInput').value = '';
+    document.getElementById('searchClear').style.display = 'none';
+    applyFilters();
+}
+
+function applyFilters() {
+    const q = document.getElementById('searchInput').value.toLowerCase().trim();
+    document.getElementById('searchClear').style.display = q ? 'block' : 'none';
+    const filtered = allMovies.filter(m => {
+        const matchQ = !q || m.titulo.toLowerCase().includes(q);
+        const matchCat = !currentCat || (m.categorias && m.categorias.includes(currentCat));
+        return matchQ && matchCat;
+    });
+    const count = document.getElementById('filterCount');
+    count.textContent = filtered.length < allMovies.length ? `Mostrando ${filtered.length} de ${allMovies.length} películas` : '';
+    renderMoviesGrid(filtered);
+}
+
 // ═══════════════════════════════════════════════════════════════════════════
 // RENDERIZAR GRID DE PELÍCULAS
 // ═══════════════════════════════════════════════════════════════════════════
-function renderMoviesGrid() {
+function renderMoviesGrid(movies) {
+    if (movies === undefined) movies = allMovies;
     const grid = document.getElementById('moviesGrid');
     
-    if (allMovies.length === 0) {
-        grid.innerHTML = '<div class="empty-message">No hay películas registradas</div>';
+    if (movies.length === 0) {
+        grid.innerHTML = '<div class="empty-message admin-no-results">No se encontraron películas</div>';
         return;
     }
     
-    grid.innerHTML = allMovies.map(movie => `
+    grid.innerHTML = movies.map(movie => `
         <div class="movie-card-delete">
             <img src="${movie.poster}" alt="${movie.titulo}" class="movie-poster-small">
             <div class="movie-info-delete">

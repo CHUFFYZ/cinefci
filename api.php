@@ -19,9 +19,19 @@ try { $db->exec("CREATE TABLE IF NOT EXISTS peliculas_ocultas (id INTEGER PRIMAR
 try { $db->exec("CREATE TABLE IF NOT EXISTS peliculas_nuevas (id INTEGER PRIMARY KEY AUTOINCREMENT, pelicula_id INTEGER NOT NULL UNIQUE, fecha_inicio DATETIME DEFAULT CURRENT_TIMESTAMP, fecha_fin DATETIME NULL)"); } catch (Exception $e) {}
 try { $db->exec("CREATE TABLE IF NOT EXISTS cartelera_config (clave TEXT PRIMARY KEY, valor TEXT NOT NULL)"); } catch (Exception $e) {}
 try { $db->exec("CREATE TABLE IF NOT EXISTS peliculas_destacadas (posicion INTEGER PRIMARY KEY, pelicula_id INTEGER NOT NULL)"); } catch (Exception $e) {}
+try { $db->exec("CREATE TABLE IF NOT EXISTS peliculas_proximamente (id INTEGER PRIMARY KEY AUTOINCREMENT, pelicula_id INTEGER NOT NULL UNIQUE, fecha_inicio DATETIME DEFAULT CURRENT_TIMESTAMP, fecha_fin DATETIME NULL)"); } catch (Exception $e) {}
 
 $method = $_SERVER['REQUEST_METHOD'];
 $action = $_GET['action'] ?? '';
+
+// Helper: obtener categorías indexadas por pelicula_id
+function getCategoriasPorPelicula($db) {
+    $stmt = $db->query("SELECT pc.pelicula_id, c.nombre FROM categorias c INNER JOIN pelicula_categorias pc ON c.id = pc.categoria_id");
+    $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    $map = [];
+    foreach ($rows as $r) { $map[$r['pelicula_id']][] = $r['nombre']; }
+    return $map;
+}
 
 if ($method === 'GET') {
 
@@ -33,6 +43,8 @@ if ($method === 'GET') {
         $categoria_filtro = $_GET['categoria'] ?? '';
         $solo_nuevas      = isset($_GET['nuevas']) && $_GET['nuevas'] === '1';
 
+        $solo_proximamente = isset($_GET['proximamente']) && $_GET['proximamente'] === '1';
+
         $sql = "
             SELECT 
                 p.*,
@@ -42,10 +54,13 @@ if ($method === 'GET') {
                 (SELECT calificacion FROM calificaciones WHERE pelicula_id = p.id AND browser_id = ? LIMIT 1) AS user_rating,
                 (SELECT fecha_finalizacion FROM suspensiones WHERE pelicula_id = p.id LIMIT 1) AS fecha_suspension,
                 CASE WHEN pn.pelicula_id IS NOT NULL AND (pn.fecha_fin IS NULL OR datetime(pn.fecha_fin) > datetime('now')) THEN 1 ELSE 0 END AS es_nueva,
-                pn.fecha_fin AS fecha_fin_nueva
+                pn.fecha_fin AS fecha_fin_nueva,
+                CASE WHEN pp.pelicula_id IS NOT NULL AND (pp.fecha_fin IS NULL OR datetime(pp.fecha_fin) > datetime('now')) THEN 1 ELSE 0 END AS es_proximamente,
+                pp.fecha_fin AS fecha_fin_proximamente
             FROM peliculas p
             LEFT JOIN peliculas_ocultas po ON po.pelicula_id = p.id
             LEFT JOIN peliculas_nuevas pn ON pn.pelicula_id = p.id
+            LEFT JOIN peliculas_proximamente pp ON pp.pelicula_id = p.id
             WHERE (
                 po.pelicula_id IS NULL
                 OR (po.fecha_fin IS NOT NULL AND datetime(po.fecha_fin) <= datetime('now'))
@@ -53,6 +68,14 @@ if ($method === 'GET') {
         ";
 
         $params = [$browser_id, $browser_id];
+
+        if ($solo_proximamente) {
+            // Solo mostrar las marcadas como próximamente
+            $sql .= " AND pp.pelicula_id IS NOT NULL AND (pp.fecha_fin IS NULL OR datetime(pp.fecha_fin) > datetime('now'))";
+        } else {
+            // Excluir las marcadas como próximamente de todas las otras vistas
+            $sql .= " AND (pp.pelicula_id IS NULL OR (pp.fecha_fin IS NOT NULL AND datetime(pp.fecha_fin) <= datetime('now')))";
+        }
 
         if ($solo_nuevas) {
             $sql .= " AND pn.pelicula_id IS NOT NULL AND (pn.fecha_fin IS NULL OR datetime(pn.fecha_fin) > datetime('now'))";
@@ -91,9 +114,10 @@ if ($method === 'GET') {
         }
 
         foreach ($peliculas as &$pelicula) {
-            $pelicula['categorias'] = $cats_por_pelicula[$pelicula['id']] ?? [];
-            $pelicula['suspendida'] = !empty($pelicula['fecha_suspension']);
-            $pelicula['es_nueva']   = (int)($pelicula['es_nueva'] ?? 0);
+            $pelicula['categorias']       = $cats_por_pelicula[$pelicula['id']] ?? [];
+            $pelicula['suspendida']       = !empty($pelicula['fecha_suspension']);
+            $pelicula['es_nueva']         = (int)($pelicula['es_nueva'] ?? 0);
+            $pelicula['es_proximamente']  = (int)($pelicula['es_proximamente'] ?? 0);
         }
 
         echo json_encode($peliculas);
@@ -155,6 +179,8 @@ if ($method === 'GET') {
     if ($action === 'movies_list') {
         $stmt = $db->query("SELECT id, titulo, poster FROM peliculas ORDER BY titulo");
         $peliculas = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        $cats_ml = getCategoriasPorPelicula($db);
+        foreach ($peliculas as &$p) { $p['categorias'] = $cats_ml[$p['id']] ?? []; }
         echo json_encode($peliculas);
         exit;
     }
@@ -215,8 +241,10 @@ if ($method === 'GET') {
         $stmt = $db->query($sql);
         $peliculas = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
+        $cats_map = getCategoriasPorPelicula($db);
         foreach ($peliculas as &$pelicula) {
             $pelicula['suspendida'] = !empty($pelicula['fecha_suspension']);
+            $pelicula['categorias'] = $cats_map[$pelicula['id']] ?? [];
         }
 
         echo json_encode($peliculas);
@@ -237,11 +265,13 @@ if ($method === 'GET') {
                 ORDER BY p.titulo
             ");
             $peliculas = $stmt->fetchAll(PDO::FETCH_ASSOC);
+            $cats_hidden = getCategoriasPorPelicula($db);
             foreach ($peliculas as &$p) {
                 $p['oculta'] = (int)$p['oculta'];
                 if ($p['oculta'] === 1 && $p['fecha_fin_oculta'] !== null && strtotime($p['fecha_fin_oculta']) < time()) {
                     $p['oculta'] = 0;
                 }
+                $p['categorias'] = $cats_hidden[$p['id']] ?? [];
             }
             echo json_encode($peliculas);
         } catch (Exception $e) {
@@ -309,6 +339,32 @@ if ($method === 'GET') {
         exit;
     }
 
+    // ═══════════════════════════════════════════════════════════════════════════
+    // LISTAR PELÍCULAS CON ESTADO DE PRÓXIMAMENTE (para admin)
+    // ═══════════════════════════════════════════════════════════════════════════
+    if ($action === 'movies_with_proximamente') {
+        try {
+            $stmt = $db->query("
+                SELECT p.id, p.titulo,
+                    pp.fecha_inicio,
+                    pp.fecha_fin AS fecha_fin_proximamente,
+                    CASE WHEN pp.pelicula_id IS NOT NULL AND (pp.fecha_fin IS NULL OR datetime(pp.fecha_fin) > datetime('now')) THEN 1 ELSE 0 END AS es_proximamente
+                FROM peliculas p
+                LEFT JOIN peliculas_proximamente pp ON pp.pelicula_id = p.id
+                ORDER BY p.titulo
+            ");
+            $peliculas = $stmt->fetchAll(PDO::FETCH_ASSOC);
+            foreach ($peliculas as &$p) {
+                $p['es_proximamente'] = (int)$p['es_proximamente'];
+            }
+            echo json_encode($peliculas);
+        } catch (Exception $e) {
+            http_response_code(500);
+            echo json_encode(['error' => $e->getMessage()]);
+        }
+        exit;
+    }
+
 } elseif ($method === 'POST') {
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -342,6 +398,41 @@ if ($method === 'GET') {
         try {
             $db->prepare("DELETE FROM peliculas_ocultas WHERE pelicula_id = ?")->execute([$pelicula_id]);
             echo json_encode(['success' => true, 'message' => 'Película visible']);
+        } catch (Exception $e) { http_response_code(500); echo json_encode(['success' => false, 'message' => $e->getMessage()]); }
+        exit;
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // MARCAR COMO PRÓXIMAMENTE
+    // ═══════════════════════════════════════════════════════════════════════════
+    if ($action === 'set_proximamente') {
+        $data = json_decode(file_get_contents('php://input'), true) ?: [];
+        $pelicula_id = (int)($data['pelicula_id'] ?? 0);
+        $fecha_fin   = (isset($data['fecha_fin']) && $data['fecha_fin'] !== '' && $data['fecha_fin'] !== null) ? $data['fecha_fin'] : null;
+        if ($pelicula_id < 1) { http_response_code(400); die(json_encode(['success' => false, 'message' => 'ID inválido'])); }
+        try {
+            $chk = $db->prepare("SELECT id FROM peliculas_proximamente WHERE pelicula_id = ?");
+            $chk->execute([$pelicula_id]);
+            if ($chk->fetch()) {
+                $db->prepare("UPDATE peliculas_proximamente SET fecha_fin = ?, fecha_inicio = CURRENT_TIMESTAMP WHERE pelicula_id = ?")->execute([$fecha_fin, $pelicula_id]);
+            } else {
+                $db->prepare("INSERT INTO peliculas_proximamente (pelicula_id, fecha_fin) VALUES (?, ?)")->execute([$pelicula_id, $fecha_fin]);
+            }
+            echo json_encode(['success' => true, 'message' => 'Película marcada como próximamente']);
+        } catch (Exception $e) { http_response_code(500); echo json_encode(['success' => false, 'message' => $e->getMessage()]); }
+        exit;
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // QUITAR SELLO PRÓXIMAMENTE
+    // ═══════════════════════════════════════════════════════════════════════════
+    if ($action === 'remove_proximamente') {
+        $data = json_decode(file_get_contents('php://input'), true) ?: [];
+        $pelicula_id = (int)($data['pelicula_id'] ?? 0);
+        if ($pelicula_id < 1) { http_response_code(400); die(json_encode(['success' => false, 'message' => 'ID inválido'])); }
+        try {
+            $db->prepare("DELETE FROM peliculas_proximamente WHERE pelicula_id = ?")->execute([$pelicula_id]);
+            echo json_encode(['success' => true, 'message' => 'Sello de próximamente quitado']);
         } catch (Exception $e) { http_response_code(500); echo json_encode(['success' => false, 'message' => $e->getMessage()]); }
         exit;
     }
@@ -437,7 +528,7 @@ if ($method === 'GET') {
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
-    // VOTAR (solo si no está suspendida)
+    // VOTAR — 1 sola petición HTTP a Turso (pipeline batch)
     // ═══════════════════════════════════════════════════════════════════════════
     if ($action === 'vote') {
         $pelicula_id = (int)($data['pelicula_id'] ?? 0);
@@ -447,39 +538,45 @@ if ($method === 'GET') {
             die(json_encode(['error' => 'ID inválido']));
         }
 
-        $stmt_check = $db->prepare("
-            SELECT fecha_finalizacion FROM suspensiones 
-            WHERE pelicula_id = ? AND datetime(fecha_finalizacion) > datetime('now')
-        ");
-        $stmt_check->execute([$pelicula_id]);
-
-        if ($stmt_check->fetch()) {
-            http_response_code(400);
-            die(json_encode(['error' => 'Esta película está suspendida y no se puede votar']));
-        }
-
         try {
-            // ── SELECT fuera de transacción para obtener resultado real ──
-            $stmt = $db->prepare("SELECT pelicula_id FROM votos WHERE browser_id = ? LIMIT 1");
-            $stmt->execute([$browser_id]);
-            $votoPrevio = $stmt->fetch(PDO::FETCH_ASSOC);
+            // Una sola petición HTTP con 2 SELECTs: suspensión + voto previo
+            $batch = $db->pipelineBatch([
+                $db->buildReq(
+                    "SELECT fecha_finalizacion FROM suspensiones WHERE pelicula_id = ? AND datetime(fecha_finalizacion) > datetime('now') LIMIT 1",
+                    [$pelicula_id]
+                ),
+                $db->buildReq(
+                    "SELECT pelicula_id FROM votos WHERE browser_id = ? LIMIT 1",
+                    [$browser_id]
+                ),
+            ]);
 
-            if ($votoPrevio) {
-                $idAnterior = (int)$votoPrevio['pelicula_id'];
-
-                if ($idAnterior === $pelicula_id) {
-                    echo json_encode(['success' => true, 'message' => 'Ya habías votado por esta']);
-                    exit;
-                }
-
-                // Quitar voto anterior
-                $db->prepare("DELETE FROM votos WHERE browser_id = ?")->execute([$browser_id]);
-                $db->prepare("UPDATE peliculas SET votos = MAX(0, votos - 1) WHERE id = ?")->execute([$idAnterior]);
+            // Verificar suspensión
+            $suspRows = $batch[0]['response']['result']['rows'] ?? [];
+            if (!empty($suspRows)) {
+                http_response_code(400);
+                die(json_encode(['error' => 'Esta película está suspendida y no se puede votar']));
             }
 
-            // Insertar nuevo voto
-            $db->prepare("INSERT INTO votos (pelicula_id, browser_id) VALUES (?, ?)")->execute([$pelicula_id, $browser_id]);
-            $db->prepare("UPDATE peliculas SET votos = votos + 1 WHERE id = ?")->execute([$pelicula_id]);
+            // Verificar voto previo
+            $votoRows = $batch[1]['response']['result']['rows'] ?? [];
+            $idAnterior = !empty($votoRows) ? (int)($votoRows[0][0]['value'] ?? 0) : 0;
+
+            if ($idAnterior === $pelicula_id) {
+                echo json_encode(['success' => true, 'message' => 'Ya habías votado por esta']);
+                exit;
+            }
+
+            // Construir escrituras en una sola petición
+            $writes = [];
+            if ($idAnterior > 0) {
+                $writes[] = $db->buildReq("DELETE FROM votos WHERE browser_id = ?", [$browser_id]);
+                $writes[] = $db->buildReq("UPDATE peliculas SET votos = MAX(0, votos - 1) WHERE id = ?", [$idAnterior]);
+            }
+            $writes[] = $db->buildReq("INSERT OR REPLACE INTO votos (pelicula_id, browser_id) VALUES (?, ?)", [$pelicula_id, $browser_id]);
+            $writes[] = $db->buildReq("UPDATE peliculas SET votos = votos + 1 WHERE id = ?", [$pelicula_id]);
+
+            $db->pipelineBatch($writes);
 
             echo json_encode(['success' => true, 'message' => 'Voto registrado correctamente']);
 
@@ -491,7 +588,7 @@ if ($method === 'GET') {
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
-    // CALIFICAR
+    // CALIFICAR — 1 sola petición HTTP a Turso (UPSERT)
     // ═══════════════════════════════════════════════════════════════════════════
     if ($action === 'rate') {
         $pelicula_id = (int)($data['pelicula_id'] ?? 0);
@@ -503,34 +600,21 @@ if ($method === 'GET') {
             die(json_encode(['error' => 'Datos inválidos']));
         }
 
-        $stmt = $db->prepare("
-            DELETE FROM calificaciones 
-            WHERE pelicula_id = ? AND browser_id = ? AND calificacion = 0
-        ");
-        $stmt->execute([$pelicula_id, $browser_id]);
-
-        $stmt = $db->prepare("
-            UPDATE calificaciones 
-            SET calificacion = ?, fecha = CURRENT_TIMESTAMP 
-            WHERE pelicula_id = ? AND browser_id = ?
-        ");
-        $stmt->execute([$rating, $pelicula_id, $browser_id]);
-        $updated = $stmt->rowCount() > 0;
-
-        if (!$updated) {
-            $stmt = $db->prepare("
+        try {
+            // UPSERT en una sola sentencia = 1 sola petición HTTP a Turso
+            $db->prepare("
                 INSERT INTO calificaciones (pelicula_id, browser_id, calificacion, fecha)
                 VALUES (?, ?, ?, CURRENT_TIMESTAMP)
-            ");
-            $ok = $stmt->execute([$pelicula_id, $browser_id, $rating]);
+                ON CONFLICT(pelicula_id, browser_id) DO UPDATE SET
+                    calificacion = excluded.calificacion,
+                    fecha = CURRENT_TIMESTAMP
+            ")->execute([$pelicula_id, $browser_id, $rating]);
 
-            if (!$ok) {
-                http_response_code(500);
-                die(json_encode(['success' => false, 'message' => 'Error al insertar calificación']));
-            }
+            echo json_encode(['success' => true, 'message' => 'Calificación guardada correctamente']);
+        } catch (Exception $e) {
+            http_response_code(500);
+            echo json_encode(['success' => false, 'message' => 'Error: ' . $e->getMessage()]);
         }
-
-        echo json_encode(['success' => true, 'message' => 'Calificación guardada correctamente']);
         exit;
     }
 

@@ -640,3 +640,53 @@ input[type="datetime-local"] { color-scheme: dark; color: white; }
         padding: 10px;
     }
 }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   BUSCADOR + FILTROS DE CATEGORÍA (compartido entre páginas admin)
+   ═══════════════════════════════════════════════════════════════════════════ */
+.admin-search-bar {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    background: rgba(255,255,255,0.04);
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 12px;
+    padding: 10px 16px;
+    margin-bottom: 14px;
+    transition: border-color 0.2s;
+}
+.admin-search-bar:focus-within { border-color: rgba(229,9,20,0.5); }
+.admin-search-icon { font-size: 1.1rem; opacity: 0.5; flex-shrink: 0; }
+.admin-search-input {
+    flex: 1; background: transparent; border: none; outline: none;
+    color: #fff; font-family: 'Montserrat', sans-serif;
+    font-size: 14px; font-weight: 500;
+}
+.admin-search-input::placeholder { color: #555; }
+.admin-search-clear {
+    background: transparent; border: none; color: #555;
+    font-size: 1.1rem; cursor: pointer; padding: 2px 6px;
+    border-radius: 5px; transition: color 0.2s; flex-shrink: 0; display: none;
+}
+.admin-search-clear:hover { color: #e50914; }
+.admin-cat-filters {
+    display: flex; flex-wrap: wrap; gap: 7px;
+    margin-bottom: 20px; align-items: center;
+}
+.admin-cat-label {
+    font-size: 10px; font-weight: 700; letter-spacing: 1.2px;
+    text-transform: uppercase; color: #555; margin-right: 4px;
+}
+.admin-cat-btn {
+    background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.1);
+    color: #888; padding: 5px 13px; border-radius: 20px;
+    font-family: 'Montserrat', sans-serif; font-size: 11px; font-weight: 600;
+    cursor: pointer; transition: all 0.18s; white-space: nowrap;
+}
+.admin-cat-btn:hover { border-color: rgba(229,9,20,0.4); color: #ccc; }
+.admin-cat-btn.active { background: rgba(229,9,20,0.18); border-color: #e50914; color: #fff; }
+.admin-filter-count { font-size: 11px; color: #555; margin-left: 4px; font-style: italic; }
+.admin-no-results {
+    text-align: center; padding: 40px 20px;
+    color: #555; font-style: italic; font-size: 14px;
+}

@@ -72,6 +72,11 @@ requireLogin();
 
             <div class="form-group">
                 <label>Categorías (máximo 10) *</label>
+                <div class="admin-search-bar" style="margin-bottom:10px;">
+                    <span class="admin-search-icon">🔍</span>
+                    <input type="text" class="admin-search-input" id="catSearch" placeholder="Buscar categoría..." oninput="filterCats()">
+                    <button class="admin-search-clear" id="catSearchClear" onclick="clearCatSearch()">✕</button>
+                </div>
                 <div class="categories-grid" id="categoriesGrid">
                     <!-- Se llenarán dinámicamente -->
                 </div>
@@ -100,6 +105,28 @@ requireLogin();
                 </div>
             </div>
 
+            <!-- SELLO PRÓXIMAMENTE -->
+            <div class="form-group" style="background:rgba(255,140,0,0.06); border:1px solid rgba(255,140,0,0.3); border-radius:12px; padding:20px;">
+                <label style="display:flex; align-items:center; gap:10px; cursor:pointer; margin-bottom:14px;">
+                    <input type="checkbox" id="marcar_proximamente" onchange="toggleProximamenteOptions()" style="width:18px;height:18px;accent-color:#ff8c00;">
+                    <span style="font-weight:700; color:#ff8c00;">🎬 Marcar como "Próximamente"</span>
+                </label>
+                <div id="proximamenteOptions" style="display:none;">
+                    <p style="font-size:12px; color:#8c8c8c; margin-bottom:12px;">La película no aparecerá en la cartelera general ni podrá recibir votos. Solo se verá en el filtro "Próximamente".</p>
+                    <div style="display:flex; flex-wrap:wrap; gap:8px; margin-bottom:12px;" id="duracionProxBtns">
+                        <button type="button" class="dur-btn prox-dur-btn" onclick="setProxDuration(7)">1 semana</button>
+                        <button type="button" class="dur-btn prox-dur-btn" onclick="setProxDuration(14)">2 semanas</button>
+                        <button type="button" class="dur-btn prox-dur-btn" onclick="setProxDuration(30)">1 mes</button>
+                        <button type="button" class="dur-btn prox-dur-btn" onclick="setProxDuration(60)">2 meses</button>
+                        <button type="button" class="dur-btn prox-dur-btn" onclick="setProxDuration('custom')">Fecha exacta</button>
+                        <button type="button" class="dur-btn dur-indef prox-dur-btn" onclick="setProxDuration(null)">Sin límite</button>
+                    </div>
+                    <div id="proxCustomDate" style="display:none;">
+                        <input type="datetime-local" id="prox_fecha_fin" style="background:#1a1a1a; border:1px solid rgba(255,255,255,0.15); border-radius:7px; padding:9px 12px; color:#fff; font-family:'Montserrat',sans-serif; font-size:12px; width:100%;">
+                    </div>
+                </div>
+            </div>
+
             <div class="form-actions">
                 <button type="submit" class="btn-primary">
                     ✓ Guardar Película
@@ -117,7 +144,8 @@ requireLogin();
 // ═══════════════════════════════════════════════════════════════════════════
 // NUEVA BADGE
 // ═══════════════════════════════════════════════════════════════════════════
-let nuevaDuracion = undefined; // undefined = no marcada, null = indefinida, número/fecha = fecha fin
+let nuevaDuracion = undefined;
+let proxDuracion  = undefined;
 
 function toggleNuevaOptions() {
     const checked = document.getElementById('marcar_nueva').checked;
@@ -125,44 +153,67 @@ function toggleNuevaOptions() {
     if (!checked) nuevaDuracion = undefined;
 }
 
+function toggleProximamenteOptions() {
+    const checked = document.getElementById('marcar_proximamente').checked;
+    document.getElementById('proximamenteOptions').style.display = checked ? 'block' : 'none';
+    if (!checked) proxDuracion = undefined;
+}
+
 function setNuevaDuration(val) {
-    document.querySelectorAll('.dur-btn').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.dur-btn:not(.prox-dur-btn)').forEach(b => b.classList.remove('active'));
     event.target.classList.add('active');
     document.getElementById('nuevaCustomDate').style.display = 'none';
+    if (val === null) { nuevaDuracion = null; }
+    else if (val === 'custom') { nuevaDuracion = 'custom'; document.getElementById('nuevaCustomDate').style.display = 'block'; const now = new Date(); now.setMinutes(now.getMinutes() - now.getTimezoneOffset()); document.getElementById('nueva_fecha_fin').min = now.toISOString().slice(0,16); }
+    else { const d = new Date(); d.setDate(d.getDate() + parseInt(val)); nuevaDuracion = d.toISOString().slice(0,19).replace('T',' '); }
+}
 
-    if (val === null) {
-        nuevaDuracion = null; // indefinido
-    } else if (val === 'custom') {
-        nuevaDuracion = 'custom';
-        document.getElementById('nuevaCustomDate').style.display = 'block';
-        const now = new Date(); now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
-        document.getElementById('nueva_fecha_fin').min = now.toISOString().slice(0,16);
-    } else {
-        const d = new Date();
-        d.setDate(d.getDate() + parseInt(val));
-        nuevaDuracion = d.toISOString().slice(0,19).replace('T',' ');
-    }
+function setProxDuration(val) {
+    document.querySelectorAll('.prox-dur-btn').forEach(b => b.classList.remove('active'));
+    event.target.classList.add('active');
+    document.getElementById('proxCustomDate').style.display = 'none';
+    if (val === null) { proxDuracion = null; }
+    else if (val === 'custom') { proxDuracion = 'custom'; document.getElementById('proxCustomDate').style.display = 'block'; const now = new Date(); now.setMinutes(now.getMinutes() - now.getTimezoneOffset()); document.getElementById('prox_fecha_fin').min = now.toISOString().slice(0,16); }
+    else { const d = new Date(); d.setDate(d.getDate() + parseInt(val)); proxDuracion = d.toISOString().slice(0,19).replace('T',' '); }
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-// CARGAR CATEGORÍAS
+// CARGAR CATEGORÍAS + BUSCADOR
 // ═══════════════════════════════════════════════════════════════════════════
+let allCategoriesRaw = [];
+
 async function loadCategories() {
     try {
         const res = await fetch('api.php?action=categorias');
-        const categories = await res.json();
-        
-        const grid = document.getElementById('categoriesGrid');
-        grid.innerHTML = categories.map(cat => `
-            <label class="category-checkbox">
-                <input type="checkbox" name="categorias[]" value="${cat.id}" onchange="limitCategories()">
-                <span>${cat.nombre}</span>
-            </label>
-        `).join('');
+        allCategoriesRaw = await res.json();
+        renderCatGrid(allCategoriesRaw);
     } catch (err) {
         console.error('Error al cargar categorías:', err);
         showMessage('Error al cargar categorías', 'error');
     }
+}
+
+function renderCatGrid(cats) {
+    const grid = document.getElementById('categoriesGrid');
+    grid.innerHTML = cats.map(cat => `
+        <label class="category-checkbox">
+            <input type="checkbox" name="categorias[]" value="${cat.id}" onchange="limitCategories()">
+            <span>${cat.nombre}</span>
+        </label>
+    `).join('');
+}
+
+function filterCats() {
+    const q = document.getElementById('catSearch').value.toLowerCase().trim();
+    document.getElementById('catSearchClear').style.display = q ? 'block' : 'none';
+    const filtered = q ? allCategoriesRaw.filter(c => c.nombre.toLowerCase().includes(q)) : allCategoriesRaw;
+    renderCatGrid(filtered);
+}
+
+function clearCatSearch() {
+    document.getElementById('catSearch').value = '';
+    document.getElementById('catSearchClear').style.display = 'none';
+    renderCatGrid(allCategoriesRaw);
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -236,11 +287,28 @@ document.getElementById('addMovieForm').addEventListener('submit', async (e) => 
                 });
             }
 
+            // Si está marcada como próximamente, guardar el badge
+            const marcarProx = document.getElementById('marcar_proximamente').checked;
+            if (marcarProx) {
+                let fechaFinProx = proxDuracion;
+                if (proxDuracion === 'custom') {
+                    fechaFinProx = document.getElementById('prox_fecha_fin').value || null;
+                }
+                await fetch('api.php?action=set_proximamente', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ pelicula_id: result.id, fecha_fin: fechaFinProx })
+                });
+            }
+
             setTimeout(() => {
                 e.target.reset();
                 document.getElementById('nuevaOptions').style.display = 'none';
                 document.getElementById('marcar_nueva').checked = false;
+                document.getElementById('proximamenteOptions').style.display = 'none';
+                document.getElementById('marcar_proximamente').checked = false;
                 nuevaDuracion = undefined;
+                proxDuracion  = undefined;
                 limitCategories();
             }, 1500);
         } else {

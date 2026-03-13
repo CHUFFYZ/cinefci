@@ -45,9 +45,20 @@ requireLogin();
             <a href="panel.php" class="back-btn">← Volver al Panel</a>
         </div>
 
+        <!-- BUSCADOR + FILTROS -->
+        <div class="admin-search-bar">
+            <span class="admin-search-icon">🔍</span>
+            <input type="text" class="admin-search-input" id="searchInput" placeholder="Buscar película por nombre..." oninput="applyFilters()">
+            <button class="admin-search-clear" id="searchClear" onclick="clearSearch()">✕</button>
+        </div>
+        <div class="admin-cat-filters" id="catFilters">
+            <span class="admin-cat-label">Categoría:</span>
+            <button class="admin-cat-btn active" data-cat="" onclick="setCat(this,'')">Todas</button>
+        </div>
+
         <!-- SELECTOR DE PELÍCULA -->
         <div class="selector-section">
-            <label for="movieSelector">Selecciona una película:</label>
+            <label for="movieSelector">Selecciona una película: <span class="admin-filter-count" id="filterCount"></span></label>
             <select id="movieSelector" onchange="loadMovieData()">
                 <option value="">-- Selecciona --</option>
             </select>
@@ -121,6 +132,30 @@ requireLogin();
                 </div>
             </div>
 
+            <!-- SELLO PRÓXIMAMENTE -->
+            <div class="form-group" style="background:rgba(255,140,0,0.06); border:1px solid rgba(255,140,0,0.3); border-radius:12px; padding:20px;">
+                <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:10px; margin-bottom:12px;">
+                    <span style="font-weight:700; color:#ff8c00;">🎬 Sello "Próximamente"</span>
+                    <span id="proxStatusText" class="nueva-status-none">Sin sello activo</span>
+                </div>
+                <p style="font-size:12px; color:#8c8c8c; margin-bottom:12px;">La película no aparecerá en la cartelera general ni podrá recibir votos mientras esté marcada.</p>
+                <div style="display:flex; flex-wrap:wrap; gap:8px; margin-bottom:12px;">
+                    <button type="button" class="dur-btn prox-dur-btn" onclick="setProxDuration(7)">1 semana</button>
+                    <button type="button" class="dur-btn prox-dur-btn" onclick="setProxDuration(14)">2 semanas</button>
+                    <button type="button" class="dur-btn prox-dur-btn" onclick="setProxDuration(30)">1 mes</button>
+                    <button type="button" class="dur-btn prox-dur-btn" onclick="setProxDuration(60)">2 meses</button>
+                    <button type="button" class="dur-btn prox-dur-btn" onclick="setProxDuration('custom')">Fecha exacta</button>
+                    <button type="button" class="dur-btn dur-indef prox-dur-btn" onclick="setProxDuration(null)">Sin límite</button>
+                </div>
+                <div id="proxCustomDate" style="display:none; margin-bottom:10px;">
+                    <input type="datetime-local" id="prox_fecha_fin" style="background:#1a1a1a; border:1px solid rgba(255,255,255,0.15); border-radius:7px; padding:9px 12px; color:#fff; font-family:'Montserrat',sans-serif; font-size:12px; width:100%;">
+                </div>
+                <div style="display:flex; gap:8px; flex-wrap:wrap;">
+                    <button type="button" onclick="activarProxBadge()" style="background:rgba(255,140,0,0.2); border:1px solid #ff8c00; color:#ff8c00; padding:8px 16px; border-radius:7px; font-family:'Montserrat',sans-serif; font-size:12px; font-weight:700; cursor:pointer;">🎬 Aplicar sello</button>
+                    <button type="button" id="btnQuitarProx" onclick="quitarProxBadge()" style="background:rgba(229,9,20,0.1); border:1px solid rgba(229,9,20,0.4); color:#e50914; padding:8px 16px; border-radius:7px; font-family:'Montserrat',sans-serif; font-size:12px; font-weight:700; cursor:pointer; display:none;">✕ Quitar sello</button>
+                </div>
+            </div>
+
             <div class="form-actions">
                 <button type="submit" class="btn-primary">
                     ✓ Guardar Cambios
@@ -138,23 +173,69 @@ requireLogin();
 let allCategories = [];
 let currentMovie = null;
 let nuevaDuracion = undefined;
-let currentNuevaBadge = null; // datos del badge actual si existe
+let proxDuracion  = undefined;
+let currentNuevaBadge = null;
+let currentProxBadge  = null;
 
 // ═══════════════════════════════════════════════════════════════════════════
 // CARGAR LISTA DE PELÍCULAS
 // ═══════════════════════════════════════════════════════════════════════════
+let allMoviesRaw = [];
+let currentCat = '';
+
 async function loadMoviesList() {
     try {
-        const res = await fetch('api.php?action=movies_list');
-        const movies = await res.json();
-        
-        const selector = document.getElementById('movieSelector');
-        selector.innerHTML = '<option value="">-- Selecciona --</option>' + 
-            movies.map(m => `<option value="${m.id}">${m.titulo}</option>`).join('');
+        const [movRes, catRes] = await Promise.all([
+            fetch('api.php?action=movies_list'),
+            fetch('api.php?action=categorias')
+        ]);
+        allMoviesRaw = await movRes.json();
+        const cats = await catRes.json();
+        buildCatFilters(cats);
+        applyFilters();
     } catch (err) {
         console.error('Error al cargar películas:', err);
         showMessage('Error al cargar lista de películas', 'error');
     }
+}
+
+function buildCatFilters(cats) {
+    const container = document.getElementById('catFilters');
+    const extra = cats.map(c => `<button class="admin-cat-btn" data-cat="${c.nombre}" onclick="setCat(this,'${c.nombre.replace(/'/g,"\'")}')">${c.nombre}</button>`).join('');
+    container.innerHTML = `<span class="admin-cat-label">Categoría:</span><button class="admin-cat-btn active" data-cat="" onclick="setCat(this,'')">Todas</button>${extra}`;
+}
+
+function setCat(btn, cat) {
+    currentCat = cat;
+    document.querySelectorAll('#catFilters .admin-cat-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    applyFilters();
+}
+
+function clearSearch() {
+    document.getElementById('searchInput').value = '';
+    document.getElementById('searchClear').style.display = 'none';
+    applyFilters();
+}
+
+function applyFilters() {
+    const q = document.getElementById('searchInput').value.toLowerCase().trim();
+    document.getElementById('searchClear').style.display = q ? 'block' : 'none';
+
+    const filtered = allMoviesRaw.filter(m => {
+        const matchQ = !q || m.titulo.toLowerCase().includes(q);
+        const matchCat = !currentCat || (m.categorias && m.categorias.includes(currentCat));
+        return matchQ && matchCat;
+    });
+
+    const selector = document.getElementById('movieSelector');
+    const prevVal = selector.value;
+    selector.innerHTML = '<option value="">-- Selecciona --</option>' +
+        filtered.map(m => `<option value="${m.id}">${m.titulo}</option>`).join('');
+    if (prevVal && filtered.find(m => String(m.id) === prevVal)) selector.value = prevVal;
+
+    const count = document.getElementById('filterCount');
+    count.textContent = filtered.length < allMoviesRaw.length ? `(${filtered.length} de ${allMoviesRaw.length})` : '';
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -189,7 +270,6 @@ async function loadMovieData() {
             return;
         }
         
-        // Llenar formulario
         document.getElementById('movie_id').value = currentMovie.id;
         document.getElementById('titulo').value = currentMovie.titulo;
         document.getElementById('poster').value = currentMovie.poster;
@@ -198,11 +278,13 @@ async function loadMovieData() {
         document.getElementById('resumen').value = currentMovie.resumen;
         document.getElementById('veces_ganadora').value = currentMovie.veces_ganadora || 0;
         
-        // Renderizar categorías
         renderCategories(currentMovie.categorias || []);
         
-        // Cargar estado del badge nueva
-        await loadNuevaBadgeStatus(movieId);
+        // Cargar ambos badges en paralelo
+        await Promise.all([
+            loadNuevaBadgeStatus(movieId),
+            loadProxBadgeStatus(movieId)
+        ]);
         
         document.getElementById('editMovieForm').style.display = 'block';
     } catch (err) {
@@ -324,7 +406,7 @@ async function loadNuevaBadgeStatus(movieId) {
 }
 
 function setNuevaDuration(val) {
-    document.querySelectorAll('.dur-btn').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.dur-btn:not(.prox-dur-btn)').forEach(b => b.classList.remove('active'));
     event.target.classList.add('active');
     document.getElementById('nuevaCustomDate').style.display = 'none';
 
@@ -382,6 +464,95 @@ async function quitarNuevaBadge() {
         if (result.success) {
             showMessage('Sello quitado correctamente', 'success');
             await loadNuevaBadgeStatus(movieId);
+        } else { showMessage('Error: ' + result.message, 'error'); }
+    } catch (e) { showMessage('Error al conectar', 'error'); }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// PRÓXIMAMENTE BADGE
+// ═══════════════════════════════════════════════════════════════════════════
+async function loadProxBadgeStatus(movieId) {
+    try {
+        const res = await fetch('api.php?action=movies_with_proximamente');
+        const movies = await res.json();
+        const movie = movies.find(m => String(m.id) === String(movieId));
+        currentProxBadge = movie || null;
+
+        const statusEl  = document.getElementById('proxStatusText');
+        const btnQuitar = document.getElementById('btnQuitarProx');
+
+        if (movie && (movie.es_proximamente === 1 || movie.es_proximamente === '1')) {
+            const fin = movie.fecha_fin_proximamente;
+            statusEl.className = 'nueva-status-active';
+            statusEl.style.color = '#ff8c00';
+            statusEl.textContent = fin ? `🎬 Activo hasta ${new Date(fin).toLocaleString('es-MX')}` : '🎬 Activo (sin límite)';
+            btnQuitar.style.display = 'inline-block';
+        } else {
+            statusEl.className = 'nueva-status-none';
+            statusEl.style.color = '';
+            statusEl.textContent = 'Sin sello activo';
+            btnQuitar.style.display = 'none';
+        }
+    } catch (e) { console.error(e); }
+}
+
+function setProxDuration(val) {
+    document.querySelectorAll('.prox-dur-btn').forEach(b => b.classList.remove('active'));
+    event.target.classList.add('active');
+    document.getElementById('proxCustomDate').style.display = 'none';
+
+    if (val === null) {
+        proxDuracion = null;
+    } else if (val === 'custom') {
+        proxDuracion = 'custom';
+        document.getElementById('proxCustomDate').style.display = 'block';
+        const now = new Date(); now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
+        document.getElementById('prox_fecha_fin').min = now.toISOString().slice(0,16);
+    } else {
+        const d = new Date();
+        d.setDate(d.getDate() + parseInt(val));
+        proxDuracion = d.toISOString().slice(0,19).replace('T',' ');
+    }
+}
+
+async function activarProxBadge() {
+    const movieId = document.getElementById('movie_id').value;
+    if (!movieId) { showMessage('Selecciona una película primero', 'error'); return; }
+    if (proxDuracion === undefined) { showMessage('Selecciona una duración para el sello', 'error'); return; }
+
+    let fechaFin = proxDuracion;
+    if (proxDuracion === 'custom') {
+        fechaFin = document.getElementById('prox_fecha_fin').value || null;
+    }
+
+    try {
+        const res = await fetch('api.php?action=set_proximamente', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ pelicula_id: movieId, fecha_fin: fechaFin })
+        });
+        const result = await res.json();
+        if (result.success) {
+            showMessage('🎬 Sello "Próximamente" aplicado', 'success');
+            await loadProxBadgeStatus(movieId);
+        } else { showMessage('Error: ' + result.message, 'error'); }
+    } catch (e) { showMessage('Error al conectar', 'error'); }
+}
+
+async function quitarProxBadge() {
+    const movieId = document.getElementById('movie_id').value;
+    if (!movieId) return;
+    if (!confirm('¿Quitar el sello "Próximamente" de esta película?')) return;
+    try {
+        const res = await fetch('api.php?action=remove_proximamente', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ pelicula_id: movieId })
+        });
+        const result = await res.json();
+        if (result.success) {
+            showMessage('Sello quitado correctamente', 'success');
+            await loadProxBadgeStatus(movieId);
         } else { showMessage('Error: ' + result.message, 'error'); }
     } catch (e) { showMessage('Error al conectar', 'error'); }
 }

@@ -89,9 +89,20 @@ requireLogin();
             o de forma <strong>indefinida</strong> (solo se muestran al darle a "Desocultar" manualmente).
         </div>
 
+        <!-- BUSCADOR + FILTROS -->
+        <div class="admin-search-bar">
+            <span class="admin-search-icon">🔍</span>
+            <input type="text" class="admin-search-input" id="searchInput" placeholder="Buscar película por nombre..." oninput="applyFilters()">
+            <button class="admin-search-clear" id="searchClear" onclick="clearSearch()">✕</button>
+        </div>
+        <div class="admin-cat-filters" id="catFilters">
+            <span class="admin-cat-label">Categoría:</span>
+            <button class="admin-cat-btn active" data-cat="" onclick="setCat(this,'')">Todas</button>
+        </div>
+
         <!-- LISTA DE PELÍCULAS -->
         <div class="movies-table-container">
-            <h3>Películas en Cartelera</h3>
+            <h3>Películas en Cartelera <span class="admin-filter-count" id="filterCount"></span></h3>
             <table class="movies-table" id="moviesTable">
                 <thead>
                     <tr>
@@ -158,34 +169,73 @@ requireLogin();
 
 <script>
 let allMovies = [];
-let selectedDuration = null; // días o 'indefinido'
+let selectedDuration = null;
+let currentCat = '';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // CARGAR PELÍCULAS
 // ═══════════════════════════════════════════════════════════════════════════
 async function loadMovies() {
     try {
-        const res = await fetch('api.php?action=movies_with_hidden');
-        allMovies = await res.json();
-        renderMoviesTable();
+        const [movRes, catRes] = await Promise.all([
+            fetch('api.php?action=movies_with_hidden'),
+            fetch('api.php?action=categorias')
+        ]);
+        allMovies = await movRes.json();
+        const cats = await catRes.json();
+        buildCatFilters(cats);
+        applyFilters();
     } catch (err) {
         console.error('Error al cargar películas:', err);
         showMessage('Error al cargar películas', 'error');
     }
 }
 
+function buildCatFilters(cats) {
+    const container = document.getElementById('catFilters');
+    const extra = cats.map(c => `<button class="admin-cat-btn" data-cat="${c.nombre}" onclick="setCat(this,'${c.nombre.replace(/'/g,"\'")}')">${c.nombre}</button>`).join('');
+    container.innerHTML = `<span class="admin-cat-label">Categoría:</span><button class="admin-cat-btn active" data-cat="" onclick="setCat(this,'')">Todas</button>${extra}`;
+}
+
+function setCat(btn, cat) {
+    currentCat = cat;
+    document.querySelectorAll('#catFilters .admin-cat-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    applyFilters();
+}
+
+function clearSearch() {
+    document.getElementById('searchInput').value = '';
+    document.getElementById('searchClear').style.display = 'none';
+    applyFilters();
+}
+
+function applyFilters() {
+    const q = document.getElementById('searchInput').value.toLowerCase().trim();
+    document.getElementById('searchClear').style.display = q ? 'block' : 'none';
+    const filtered = allMovies.filter(m => {
+        const matchQ = !q || m.titulo.toLowerCase().includes(q);
+        const matchCat = !currentCat || (m.categorias && m.categorias.includes(currentCat));
+        return matchQ && matchCat;
+    });
+    const count = document.getElementById('filterCount');
+    count.textContent = filtered.length < allMovies.length ? `(${filtered.length} de ${allMovies.length})` : '';
+    renderMoviesTable(filtered);
+}
+
 // ═══════════════════════════════════════════════════════════════════════════
 // RENDERIZAR TABLA
 // ═══════════════════════════════════════════════════════════════════════════
-function renderMoviesTable() {
+function renderMoviesTable(movies) {
+    if (movies === undefined) movies = allMovies;
     const tbody = document.querySelector('#moviesTable tbody');
 
-    if (allMovies.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="3" style="text-align: center;">No hay películas</td></tr>';
+    if (movies.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="3" style="text-align:center;" class="admin-no-results">No se encontraron películas</td></tr>';
         return;
     }
 
-    tbody.innerHTML = allMovies.map(movie => {
+    tbody.innerHTML = movies.map(movie => {
         // Turso devuelve números como strings: forzar comparación correcta
         const isHidden = movie.oculta === 1 || movie.oculta === '1' || movie.oculta === true;
         const isIndefinido = isHidden && !movie.fecha_fin_oculta;

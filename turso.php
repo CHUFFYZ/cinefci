@@ -86,6 +86,17 @@ class TursoDB {
         ];
     }
 
+    // ── pipelineBatch(): ejecutar varias sentencias en UNA sola petición HTTP ──
+    // Devuelve array de resultados en el mismo orden que los requests.
+    public function pipelineBatch(array $requests): array {
+        return $this->pipeline($requests);
+    }
+
+    // Helper para construir un request desde fuera de la clase
+    public function buildReq(string $sql, array $params = []): array {
+        return $this->buildRequest($sql, $params);
+    }
+
     // ── exec(): para sentencias sin parámetros (CREATE, DELETE sin bind…) ──
     public function exec(string $sql): void {
         if ($this->inTransaction) {

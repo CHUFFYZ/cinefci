@@ -91,6 +91,7 @@ try {
         <!-- Grupo 1: Filtro de contenido (solo uno activo) -->
         <button class="filter-btn filter-content active" data-content="todas" onclick="filterByCategory('')">Todas</button>
         <button class="filter-btn filter-content" data-content="nuevas" onclick="filterNuevas()">Nuevo</button>
+        <button class="filter-btn filter-content" data-content="proximamente" onclick="filterProximamente()">Próximamente</button>
         <!-- Grupo 2: Subfiltro de orden (independiente, toggle) -->
         <button class="filter-btn filter-order" data-order="az" onclick="toggleOrder('az')">A-Z</button>
         <button class="filter-btn filter-order" data-order="popularidad" onclick="toggleOrder('popularidad')">Pop</button>
@@ -368,6 +369,7 @@ function renderMovies(movies) {
         const isSuspended = m.suspendida && m.fecha_suspension;
         const isMasVotada = masVotadaGlobal && masVotadaGlobal.id === m.id && masVotadaGlobal.veces_ganadora > 0;
         const isNueva = m.es_nueva === 1 || m.es_nueva === '1' || m.es_nueva === true;
+        const isProximamente = m.es_proximamente === 1 || m.es_proximamente === '1' || m.es_proximamente === true;
         
         let timeRemaining = '';
         if (isSuspended) {
@@ -407,15 +409,19 @@ function renderMovies(movies) {
             <div class="movie-card ">
                 ${isMasVotada ? '<div class="ribbon-badge">🏆 Más Votada</div>' : ''}
                 ${isNueva ? '<div class="ribbon-new">Nuevo</div>' : ''}
+                ${isProximamente ? '<div class="ribbon-proximamente">Próximamente</div>' : ''}
                 <img src="${m.poster}" alt="${m.titulo}" class="movie-poster ${isSuspended ? 'suspended' : ''}" 
                      loading="lazy" onerror="this.src='image/no-poster.png'" onclick="openModal(${m.id})">
                 <div class="movie-info">
                     <div class="movie-title">${m.titulo}</div>
-                    <button class="vote-btn ${m.ya_voto ? 'voted' : ''} ${isSuspended ? 'disabled' : ''}" 
-                            onclick="voteForMovie(${m.id}, event)"
-                            ${m.ya_voto || isSuspended ? 'disabled' : ''}>
-                        ${isSuspended ? `⏸ Suspendida: (${timeRemaining})`: (m.ya_voto ? `★ Tu voto (${m.votos})` : `Votar por esta (${m.votos})`)}
-                    </button>
+                    ${isProximamente
+                        ? `<button class="vote-btn disabled" disabled style="background:rgba(255,140,0,0.15);border-color:rgba(255,140,0,0.4);color:#ff8c00;cursor:default;">🎬 Próximamente</button>`
+                        : `<button class="vote-btn ${m.ya_voto ? 'voted' : ''} ${isSuspended ? 'disabled' : ''}" 
+                                onclick="voteForMovie(${m.id}, event)"
+                                ${m.ya_voto || isSuspended ? 'disabled' : ''}>
+                            ${isSuspended ? `⏸ Suspendida: (${timeRemaining})`: (m.ya_voto ? `★ Tu voto (${m.votos})` : `Votar por esta (${m.votos})`)}
+                           </button>`
+                    }
                 </div>
             </div>
         `;
@@ -494,6 +500,26 @@ async function filterNuevas() {
     }
 }
 
+async function filterProximamente() {
+    currentFilter = '__proximamente__';
+    userHasSetOrder = false;
+    currentOrder = 'defecto';
+    setOrderActive('__none__');
+    setContentActive('proximamente');
+    showGridLoading();
+    try {
+        const [moviesRes, statsRes] = await Promise.all([
+            fetch(`api.php?action=list&browser_id=${encodeURIComponent(browserId)}&proximamente=1`),
+            fetch('api.php?action=stats')
+        ]);
+        currentMovies = await moviesRes.json();
+        masVotadaGlobal = (await statsRes.json()).mas_votada;
+        applyOrderAndRender(currentOrder);
+    } catch (err) {
+        console.error('Error al filtrar próximamente:', err);
+    }
+}
+
 // ═══════════════════════════════════════════════════════════════════════════
 // SUBFILTRO DE ORDEN — toggle independiente del filtro de contenido
 // ═══════════════════════════════════════════════════════════════════════════
@@ -513,77 +539,124 @@ function toggleOrder(criterio) {
 
 function sortMovies(criterio) { toggleOrder(criterio); }
 // ═══════════════════════════════════════════════════════════════════════════
-// VOTAR
+// VOTAR — Optimistic UI: actualiza pantalla al instante, guarda en background
 // ═══════════════════════════════════════════════════════════════════════════
-async function voteForMovie(id, e) {
+function voteForMovie(id, e) {
     e.stopPropagation();
     const btn = e.target;
-    btn.disabled = true;
-    btn.textContent = 'Guardando...';
+    if (btn.disabled) return;
 
-    try {
-        const res = await fetch('api.php?action=vote', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ pelicula_id: id, browser_id: browserId })
-        });
-        const data = await res.json();
+    // Snapshot para revertir si falla
+    const snapshot = currentMovies.map(m => ({ ...m }));
 
-        if (data.success) {
-            // Actualizar votos en memoria: quitar voto anterior, agregar nuevo
-            currentMovies.forEach(m => {
-                if (m.ya_voto && parseInt(m.id) !== parseInt(id)) {
-                    m.ya_voto = false;
-                    m.votos = Math.max(0, parseInt(m.votos || 0) - 1);
-                }
-            });
-            const movie = currentMovies.find(m => parseInt(m.id) === parseInt(id));
-            if (movie) {
-                const yaVotaba = movie.ya_voto;
-                movie.ya_voto = true;
-                if (!yaVotaba) movie.votos = parseInt(movie.votos || 0) + 1;
-            }
-            /* Re-renderizar preservando orden actual
-            applyOrderAndRender(carteleraConfig.orden || 'defecto');*/
-            applyOrderAndRender(currentOrder);
-        } else {
-            alert(data.message || data.error);
-            btn.disabled = false;
+    // ── Actualizar estado en memoria INMEDIATAMENTE ──
+    currentMovies.forEach(m => {
+        if (m.ya_voto && parseInt(m.id) !== parseInt(id)) {
+            m.ya_voto = false;
+            m.votos = Math.max(0, parseInt(m.votos || 0) - 1);
         }
-    } catch (err) {
-        console.error(err);
-        alert('Error al conectar con el servidor');
-        btn.disabled = false;
+    });
+    const movie = currentMovies.find(m => parseInt(m.id) === parseInt(id));
+    if (movie) {
+        if (!movie.ya_voto) movie.votos = parseInt(movie.votos || 0) + 1;
+        movie.ya_voto = true;
     }
+
+    // Renderizar SIN esperar al servidor
+    applyOrderAndRender(currentOrder);
+
+    // ── Guardar en servidor en background (sin await) ──
+    fetch('api.php?action=vote', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ pelicula_id: id, browser_id: browserId })
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (!data.success && data.message !== 'Ya habías votado por esta') {
+            // Revertir si el servidor rechazó
+            currentMovies.length = 0;
+            snapshot.forEach(m => currentMovies.push(m));
+            applyOrderAndRender(currentOrder);
+            alert(data.message || data.error);
+        }
+    })
+    .catch(() => {
+        // Revertir si no hay red
+        currentMovies.length = 0;
+        snapshot.forEach(m => currentMovies.push(m));
+        applyOrderAndRender(currentOrder);
+        alert('Error al conectar con el servidor');
+    });
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-// CALIFICAR CON ESTRELLAS
+// CALIFICAR CON ESTRELLAS — Optimistic UI: actualiza al instante, guarda en background
 // ═══════════════════════════════════════════════════════════════════════════
-async function rateMovie(id, rating) {
-    // Feedback inmediato en las estrellas — sin esperar al servidor
+function rateMovie(id, rating) {
+    const idx = currentMovies.findIndex(m => parseInt(m.id) === parseInt(id));
+
+    // Snapshot para revertir si falla
+    const snap = idx !== -1 ? { ...currentMovies[idx] } : null;
+
+    // ── Actualizar estrellas y promedio INMEDIATAMENTE ──
     const stars = document.querySelectorAll('#starsContainer .star');
     stars.forEach((s, i) => s.classList.toggle('active', i < rating));
 
-    try {
-        const res = await fetch('api.php?action=rate', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ pelicula_id: id, rating, browser_id: browserId })
-        });
-        const data = await res.json();
+    if (idx !== -1) {
+        const movie = currentMovies[idx];
+        const prevTotal      = parseInt(movie.total_calificaciones) || 0;
+        const prevPromedio   = parseFloat(movie.promedio) || 0;
+        const prevUserRating = parseInt(movie.user_rating) || 0;
 
-        if (res.ok && data.success) {
-            // Solo actualiza los datos de ESA película — no recarga todo
-            refreshMovieRating(id, rating);
-            showNotification('¡Gracias por tu calificación!');
+        let nuevoTotal, nuevoPromedio;
+        if (prevUserRating > 0) {
+            nuevoTotal   = prevTotal;
+            nuevoPromedio = prevTotal > 0
+                ? ((prevPromedio * prevTotal) - prevUserRating + rating) / prevTotal
+                : rating;
         } else {
+            nuevoTotal   = prevTotal + 1;
+            nuevoPromedio = prevTotal > 0
+                ? ((prevPromedio * prevTotal) + rating) / nuevoTotal
+                : rating;
+        }
+
+        currentMovies[idx].promedio             = nuevoPromedio.toFixed(1);
+        currentMovies[idx].total_calificaciones = nuevoTotal;
+        currentMovies[idx].user_rating          = rating;
+
+        updateAverageRating(currentMovies[idx]);
+        renderStars(currentMovies[idx]);
+    }
+    showNotification('¡Gracias por tu calificación!');
+
+    // ── Guardar en servidor en background (sin await) ──
+    fetch('api.php?action=rate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ pelicula_id: id, rating, browser_id: browserId })
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (!data.success) {
+            // Revertir si el servidor rechazó
+            if (snap && idx !== -1) {
+                currentMovies[idx] = snap;
+                updateAverageRating(snap);
+                renderStars(snap);
+            }
             alert(data.message || 'No se pudo guardar la calificación');
         }
-    } catch (err) {
-        console.error(err);
+    })
+    .catch(() => {
+        if (snap && idx !== -1) {
+            currentMovies[idx] = snap;
+            updateAverageRating(snap);
+            renderStars(snap);
+        }
         alert('Error al conectar con el servidor');
-    }
+    });
 }
 
 // Actualiza promedio/estrellas de una película SIN recargar la lista ni alterar el orden
