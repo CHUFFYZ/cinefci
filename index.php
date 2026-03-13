@@ -4,9 +4,9 @@ require_once __DIR__ . '/turso.php';
 // Cargar textos configurables de Turso
 $logo_cargando    = 'CINE-FCI';
 $texto_cargando   = '';
-$texto_logo       = '';
-$subtitulo_header = '';
-$titulo_catalogo  = '';
+$texto_logo       = 'CINE-FCI';
+$subtitulo_header = 'Tu voz en el cine';
+$titulo_catalogo  = 'Catálogo';
 
 try {
     $db   = new TursoDB(TURSO_URL, TURSO_TOKEN);
@@ -543,8 +543,9 @@ async function voteForMovie(id, e) {
                 movie.ya_voto = true;
                 if (!yaVotaba) movie.votos = parseInt(movie.votos || 0) + 1;
             }
-            // Re-renderizar preservando orden actual
-            applyOrderAndRender(carteleraConfig.orden || 'defecto');
+            /* Re-renderizar preservando orden actual
+            applyOrderAndRender(carteleraConfig.orden || 'defecto');*/
+            applyOrderAndRender(currentOrder);
         } else {
             alert(data.message || data.error);
             btn.disabled = false;
@@ -676,8 +677,10 @@ window.addEventListener('load', async () => {
     const ordenInicial  = carteleraConfig.orden || 'defecto';
     const catInicial    = carteleraConfig.categoria_inicial || '';
 
-    // El orden de config se aplica en carga inicial sin marcar botón ni contar como orden manual
+    /* El orden de config se aplica en carga inicial sin marcar botón ni contar como orden manual
     currentOrder    = 'defecto';
+    userHasSetOrder = false;*/
+    currentOrder    = ordenInicial;   // ← guarda el orden de la config
     userHasSetOrder = false;
 
     if (filtroInicial === 'nuevas') {
